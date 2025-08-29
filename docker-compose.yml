@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  react-app:
+    image: node:18-alpine
+    working_dir: /app
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./front:/app
+      - node_modules_volume:/app/node_modules
+    command: sh -c "npm install && npm start"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+volumes:
+  node_modules_volume:
