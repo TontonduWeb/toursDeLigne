@@ -1,16 +1,26 @@
 {
-  "name": "back",
+  "name": "tour-de-ligne-server",
   "version": "1.0.0",
+  "description": "Serveur WebSocket pour la gestion du tour de ligne",
   "main": "serveur.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node serveur.js",
+    "dev": "nodemon serveur.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "express": "^5.1.0",
-    "websocket": "^1.0.35"
-  }
+    "ws": "^8.14.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "websocket",
+    "express",
+    "realtime"
+  ],
+  "author": "Votre nom",
+  "license": "MIT"
 }
