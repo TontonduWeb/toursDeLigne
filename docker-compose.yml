@@ -8,15 +8,15 @@ services:
       dockerfile: Dockerfile
     container_name: tour-de-ligne-server
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       - NODE_ENV=production
-      - PORT=8080
+      - PORT=8081
     restart: unless-stopped
     networks:
       - tour-de-ligne-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -29,9 +29,9 @@ services:
       dockerfile: Dockerfile
     container_name: tour-de-ligne-frontend
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
-      - REACT_APP_WEBSOCKET_URL=ws://localhost:8080
+      - REACT_APP_WEBSOCKET_URL=ws://localhost:8081
       - NODE_ENV=production
     depends_on:
       - websocket-server
