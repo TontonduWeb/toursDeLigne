@@ -8,7 +8,7 @@ interface WebSocketState {
 
 interface WebSocketSyncOptions {
   onOpen?: () => void;
-  onClose?: () => void;
+  onClose?: (event: CloseEvent) => void;
   onError?: (error: Event) => void;
   shouldReconnect?: boolean;
   reconnectAttempts?: number;
@@ -59,6 +59,11 @@ export const useWebSocketSync = (url: string, options: WebSocketSyncOptions = {}
 
   // Fonction de connexion
   const connect = useCallback(() => {
+    // Éviter les connexions multiples
+    if (socketRef.current && socketRef.current.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+    
     try {
       const ws = new WebSocket(url);
       socketRef.current = ws;
@@ -86,10 +91,10 @@ export const useWebSocketSync = (url: string, options: WebSocketSyncOptions = {}
           connectionStatus: 'Disconnected'
         });
         
-        onClose?.();
+        onClose?.(event);
 
-        // Logique de reconnexion
-        if (shouldReconnect && reconnectAttempts.current < maxReconnectAttempts) {
+        // Logique de reconnexion - seulement si la fermeture n'est pas intentionnelle
+        if (shouldReconnect && reconnectAttempts.current < maxReconnectAttempts && event.code !== 1000) {
           reconnectAttempts.current += 1;
           setWsState(prev => ({
             ...prev,
@@ -146,17 +151,26 @@ export const useWebSocketSync = (url: string, options: WebSocketSyncOptions = {}
 
   // Initialiser la connexion
   useEffect(() => {
-    connect();
+    let mounted = true;
+    
+    const initConnection = () => {
+      if (mounted) {
+        connect();
+      }
+    };
+    
+    initConnection();
     
     return () => {
+      mounted = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (socketRef.current) {
-        socketRef.current.close();
+        socketRef.current.close(1000); // Code 1000 = fermeture normale
       }
     };
-  }, [connect]);
+  }, [url]); // Seulement dépendant de l'URL, pas de connect
 
   return {
     ...wsState,
