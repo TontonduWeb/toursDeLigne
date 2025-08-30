@@ -27,7 +27,7 @@ const TourDeLigneApp: React.FC = () => {
     isConnected,
     connectionStatus,
     readyState
-  } = useWebSocketSync('ws://192.168.1.27:8081', {
+  } = useWebSocketSync('ws://192.168.1.27:8082', {
     onOpen: () => {
       console.log('WebSocket connecté !');
       // Demander l'état initial du serveur
