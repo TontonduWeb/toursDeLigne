@@ -1,7 +1,12 @@
 {
-  "short_name": "React App",
+  "short_name": "Tours de ligne",
   "name": "Create React App Sample",
   "icons": [
+    {
+      "src": "course-de-relais.png",
+      "sizes":"64x64 32x32 24x24 16x16",
+      "type": "image/png"
+    },
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
