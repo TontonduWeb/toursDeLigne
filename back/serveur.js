@@ -1,5 +1,3 @@
-import { getAdjustedDateString, getAdjustedTimeString } from './src/utils/dateUtils'
-
 const WebSocket = require('ws');
 const http = require('http');
 const express = require('express');
@@ -56,8 +54,8 @@ function handleAction(action, ws) {
         
         // Ajouter à l'historique
         currentState.historique.unshift({
-          date: new Date().toLocaleDateString('fr-FR'),
-          heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
+          date: new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
+          heure: new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleTimeString('fr-FR'),
           action: `Vente enregistrée pour ${vendeur}`,
           vendeur: vendeur
         });
@@ -82,8 +80,8 @@ function handleAction(action, ws) {
       
       // Ajouter à l'historique
       currentState.historique.unshift({
-        date: new Date().toLocaleDateString('fr-FR'),
-        heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
+        date: new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
+        heure: new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleTimeString('fr-FR'),
         action: 'Journée terminée - Remise à zéro',
         vendeur: 'Système'
       });
