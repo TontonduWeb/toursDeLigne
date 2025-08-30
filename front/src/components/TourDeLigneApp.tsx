@@ -9,7 +9,7 @@ import EnregistrementVentes from './EnregistrementVentes';
 import HistoriqueVentes from './HistoriqueVentes';
 import ActionButtons from './ActionButtons';
 import { trierOrdreVendeurs } from '../services/vendeurService';
-import { getAdjustedDateString, getAdjustedTimeString } from '../utils/dateUtils';
+import { getAdjustedDateString, getAdjustedTimeString, getAdjustedDate } from '../utils/dateUtils';
 
 const TourDeLigneApp: React.FC = () => {
   // États avec localStorage (gardés pour la persistance locale)
@@ -189,7 +189,7 @@ const TourDeLigneApp: React.FC = () => {
       {
         action: 'demarrage' as const,
         date: getAdjustedDateString(),
-        heure: getAdjustedTimeString(),
+        heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
         message: `Démarrage de la journée avec l'ordre: ${vendeurs.join(', ')}`
       }
     ];
@@ -218,7 +218,7 @@ const TourDeLigneApp: React.FC = () => {
         {
           action: 'fin' as const,
           date: getAdjustedDateString(),
-          heure: getAdjustedTimeString(),
+          heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
           message: `Fin de la journée`
         }
       ]);
@@ -258,7 +258,7 @@ const TourDeLigneApp: React.FC = () => {
             action: 'vente' as const,
             vendeur,
             date: getAdjustedDateString(),
-            heure: getAdjustedTimeString(),
+            heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
             nouvelOrdre: ordre.join(', ')
           }
         ]);
