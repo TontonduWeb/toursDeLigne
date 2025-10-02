@@ -1,49 +1,20 @@
 version: '3.8'
 
 services:
-  # Serveur WebSocket (Backend)
   websocket-server:
-    build:
-      context: ./back
-      dockerfile: Dockerfile
-    container_name: tour-de-ligne-server
-    ports:
-      - "8082:8080"
-    environment:
-      - NODE_ENV=production
-      - PORT=8080
+    image: node:18-alpine
+    container_name: toursdeligne-websocket-server
     restart: unless-stopped
+    expose:
+      - "8080"
     networks:
-      - tour-de-ligne-network
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Frontend React
-  frontend:
-    build:
-      context: ./front
-      dockerfile: Dockerfile
-    container_name: tour-de-ligne-frontend
-    ports:
-      - "3001:3000"
-    environment:
-      - REACT_APP_WEBSOCKET_URL=ws://192.168.1.27:8082
-      - NODE_ENV=production
-    depends_on:
-      - websocket-server
-    restart: unless-stopped
-    networks:
-      - tour-de-ligne-network
+      - internal
+    working_dir: /app
+    volumes:
+      - ./app/back:/app:rw
+    command: ["node", "serveur.js"]  # adapte selon le nom de ton fichier serveur
 
 networks:
-  tour-de-ligne-network:
-    driver: bridge
-
-# Optionnel : volumes pour persister les données
-volumes:
-  app-data:
-    driver: local
+  internal:
+    external: true
+    name: docker-services_internal
