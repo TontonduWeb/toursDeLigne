@@ -23,7 +23,7 @@ const TourDeLigneApp: React.FC = () => {
 
   // Hook REST API avec polling
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
-    baseUrl: 'http://192.168.1.27:8082',
+    baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:8082',
     pollingInterval: 3000,
     onStateUpdate: (serverState) => {
       console.log('📥 État serveur reçu:', serverState);
