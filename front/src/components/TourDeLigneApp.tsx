@@ -2,9 +2,10 @@
 import React, { useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useWebSocketSync } from '../hooks/useWebSocketSync';
-import { HistoriqueItem, VendeurData } from '../types';
+import { HistoriqueItem, VendeurData, ClientEnCours } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
 import GestionOrdre from './GestionOrdre';
+import GestionClients from './GestionClients'; // Nouveau composant
 import EnregistrementVentes from './EnregistrementVentes';
 import HistoriqueVentes from './HistoriqueVentes';
 import ActionButtons from './ActionButtons';
@@ -31,7 +32,6 @@ const TourDeLigneApp: React.FC = () => {
   } = useWebSocketSync('ws://192.168.1.27:8082', {
     onOpen: () => {
       console.log('WebSocket connecté !');
-      // Demander l'état initial du serveur
       sendMessage({ type: 'GET_INITIAL_STATE' });
     },
     onClose: () => {
@@ -47,22 +47,20 @@ const TourDeLigneApp: React.FC = () => {
     const handleStateUpdate = (serverState: any) => {
       console.log('Mise à jour serveur reçue:', serverState);
       
-      // Variables pour stocker les nouvelles données
       let nouveauxVendeurs = vendeurs;
       let nouvellesVendeursData = vendeursData;
       
-      // Mettre à jour l'état local avec les données du serveur
       if (serverState.vendeurs) {
         const vendeurNames = serverState.vendeurs.map((v: any) => v.nom);
         nouveauxVendeurs = vendeurNames;
         setVendeurs(vendeurNames);
         
-        // Convertir les données vendeurs du serveur vers notre format local
         const vendeursDataLocal: Record<string, VendeurData> = {};
         serverState.vendeurs.forEach((v: any) => {
           vendeursDataLocal[v.nom] = {
             nom: v.nom,
-            compteurVentes: v.ventes
+            compteurVentes: v.ventes,
+            clientEnCours: v.clientEnCours || undefined // Nouveau: synchronisation du client en cours
           };
         });
         nouvellesVendeursData = vendeursDataLocal;
@@ -70,7 +68,6 @@ const TourDeLigneApp: React.FC = () => {
       }
 
       if (serverState.ordreActuel?.prochainVendeur) {
-        // Recalculer l'ordre basé sur les données serveur
         const nouveauOrdre = trierOrdreVendeurs(
           nouveauxVendeurs, 
           ordre, 
@@ -80,10 +77,12 @@ const TourDeLigneApp: React.FC = () => {
       }
 
       if (serverState.historique) {
-        // Convertir l'historique du serveur vers notre format
         const historiqueLocal: HistoriqueItem[] = serverState.historique.map((h: any) => ({
-          action: h.action.includes('Vente') ? 'vente' : 'autre',
+          action: h.action.includes('Vente') ? 'vente' : 
+                 h.action.includes('Client pris') ? 'prise_client' :
+                 h.action.includes('Client abandonné') ? 'abandon_client' : 'autre',
           vendeur: h.vendeur || undefined,
+          clientId: h.clientId || undefined, // Nouveau
           date: h.date,
           heure: h.heure,
           message: h.action,
@@ -100,7 +99,7 @@ const TourDeLigneApp: React.FC = () => {
     };
   }, [subscribe, unsubscribe, vendeurs, ordre, vendeursData, setVendeurs, setVendeursData, setOrdre, setHistorique]);
 
-  // Mettre à jour l'ordre selon les règles métier chaque fois que vendeursData change
+  // Mettre à jour l'ordre selon les règles métier
   useEffect(() => {
     if (journeeActive && ordreInitial.length > 0) {
       const nouvelOrdre = trierOrdreVendeurs(ordreInitial, ordre, vendeursData);
@@ -110,16 +109,16 @@ const TourDeLigneApp: React.FC = () => {
     }
   }, [vendeursData, journeeActive, ordreInitial, ordre, setOrdre]);
 
-  // Fonctions de gestion des vendeurs
+  // Fonctions de gestion des vendeurs (inchangées)
   const ajouterVendeur = (vendeur: string): void => {
     if (!vendeurs.includes(vendeur)) {
       const updatedVendeurs = [...vendeurs, vendeur];
       setVendeurs(updatedVendeurs);
       
-      // Initialiser les données du nouveau vendeur
       const newVendeurData = {
         nom: vendeur,
-        compteurVentes: 0
+        compteurVentes: 0,
+        clientEnCours: undefined // Nouveau: pas de client au départ
       };
       
       setVendeursData(prev => ({
@@ -127,9 +126,7 @@ const TourDeLigneApp: React.FC = () => {
         [vendeur]: newVendeurData
       }));
 
-      // Synchroniser avec le serveur si connecté
       if (isConnected) {
-        // Note: Tu pourrais ajouter une action AJOUTER_VENDEUR côté serveur si nécessaire
         sendMessage({
           type: 'SYNC_VENDEURS',
           payload: { vendeurs: updatedVendeurs }
@@ -145,12 +142,10 @@ const TourDeLigneApp: React.FC = () => {
       setOrdreInitial(ordreInitial.filter(v => v !== vendeur));
     }
     
-    // Supprimer les données du vendeur
     const updatedVendeursData = {...vendeursData};
     delete updatedVendeursData[vendeur];
     setVendeursData(updatedVendeursData);
 
-    // Synchroniser avec le serveur si connecté
     if (isConnected) {
       sendMessage({
         type: 'SYNC_VENDEURS',
@@ -159,30 +154,28 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
-  // Fonctions de gestion de la journée
+  // Fonctions de gestion de la journée (inchangées)
   const demarrerJournee = (): void => {
     if (vendeurs.length === 0) {
       alert("Veuillez ajouter au moins un vendeur avant de démarrer la journée.");
       return;
     }
     
-    // Définir l'ordre initial (même que la liste des vendeurs)
     const initialOrdre = [...vendeurs];
     setOrdreInitial(initialOrdre);
     setOrdre(initialOrdre);
     setJourneeActive(true);
     
-    // Réinitialiser les compteurs de ventes pour tous les vendeurs
     const nouveauVendeursData: Record<string, VendeurData> = {};
     vendeurs.forEach(vendeur => {
       nouveauVendeursData[vendeur] = {
         nom: vendeur,
-        compteurVentes: 0
+        compteurVentes: 0,
+        clientEnCours: undefined // Nouveau: pas de client au départ
       };
     });
     setVendeursData(nouveauVendeursData);
     
-    // Ajouter à l'historique
     const maintenant = new Date();
     const nouvelHistorique = [
       ...historique, 
@@ -195,7 +188,6 @@ const TourDeLigneApp: React.FC = () => {
     ];
     setHistorique(nouvelHistorique);
 
-    // Synchroniser avec le serveur si connecté
     if (isConnected) {
       sendMessage({
         type: 'DEMARRER_JOURNEE',
@@ -206,12 +198,10 @@ const TourDeLigneApp: React.FC = () => {
 
   const terminerJournee = (): void => {
     if (window.confirm('Êtes-vous sûr de vouloir terminer la journée ? L\'ordre sera réinitialisé.')) {
-      // Synchroniser avec le serveur AVANT de modifier l'état local
       if (isConnected) {
         sendMessage({ type: 'TERMINER_JOURNEE' });
       }
 
-      // Ajouter à l'historique
       const maintenant = new Date();
       setHistorique([
         ...historique, 
@@ -229,27 +219,108 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
-  // Fonction d'enregistrement des ventes
-  const enregistrerVente = (vendeur: string): void => {
-    if (!journeeActive || !ordre.includes(vendeur)) return;
+  // NOUVELLES FONCTIONS: Gestion des clients
+  const prendreClient = (vendeur: string): void => {
+    if (!journeeActive || !ordre.includes(vendeur) || vendeursData[vendeur]?.clientEnCours) return;
     
-    // Synchroniser avec le serveur AVANT de modifier l'état local
+    const maintenant = getAdjustedDate();
+    const clientId = `client-${Date.now()}`;
+    const nouveauClient: ClientEnCours = {
+      id: clientId,
+      heureDebut: maintenant.toLocaleTimeString('fr-FR'),
+      dateDebut: getAdjustedDateString()
+    };
+
+    // Mettre à jour les données du vendeur
+    setVendeursData(prev => ({
+      ...prev,
+      [vendeur]: {
+        ...prev[vendeur],
+        clientEnCours: nouveauClient
+      }
+    }));
+
+    // Ajouter à l'historique
+    setHistorique(prev => [
+      ...prev,
+      {
+        action: 'prise_client' as const,
+        vendeur,
+        clientId,
+        date: getAdjustedDateString(),
+        heure: maintenant.toLocaleTimeString('fr-FR'),
+        message: `${vendeur} a pris un client en charge`
+      }
+    ]);
+
+    // Synchroniser avec le serveur
+    if (isConnected) {
+      sendMessage({
+        type: 'PRENDRE_CLIENT',
+        payload: { vendeur, clientId }
+      });
+    }
+  };
+
+  const abandonnerClient = (vendeur: string): void => {
+    if (!journeeActive || !vendeursData[vendeur]?.clientEnCours) return;
+
+    const clientId = vendeursData[vendeur]?.clientEnCours?.id;
+
+    // Retirer le client du vendeur
+    setVendeursData(prev => ({
+      ...prev,
+      [vendeur]: {
+        ...prev[vendeur],
+        clientEnCours: undefined
+      }
+    }));
+
+    // Ajouter à l'historique
+    const maintenant = getAdjustedDate();
+    setHistorique(prev => [
+      ...prev,
+      {
+        action: 'abandon_client' as const,
+        vendeur,
+        clientId,
+        date: getAdjustedDateString(),
+        heure: maintenant.toLocaleTimeString('fr-FR'),
+        message: `${vendeur} a abandonné son client`
+      }
+    ]);
+
+    // Synchroniser avec le serveur
+    if (isConnected) {
+      sendMessage({
+        type: 'ABANDONNER_CLIENT',
+        payload: { vendeur, clientId }
+      });
+    }
+  };
+
+  // FONCTION MODIFIÉE: Enregistrement des ventes
+  const enregistrerVente = (vendeur: string): void => {
+    if (!journeeActive || !ordre.includes(vendeur) || !vendeursData[vendeur]?.clientEnCours) return;
+    
+    const clientId = vendeursData[vendeur]?.clientEnCours?.id;
+
     if (isConnected) {
       sendMessage({
         type: 'ENREGISTRER_VENTE',
-        payload: { vendeur }
+        payload: { vendeur, clientId }
       });
     } else {
-      // Fallback local si pas de connexion
+      // Fallback local
       setVendeursData(prev => ({
         ...prev,
         [vendeur]: {
           ...(prev[vendeur] || { nom: vendeur }),
-          compteurVentes: (prev[vendeur]?.compteurVentes || 0) + 1
+          compteurVentes: (prev[vendeur]?.compteurVentes || 0) + 1,
+          clientEnCours: undefined // Libérer le vendeur
         }
       }));
       
-      // Ajouter à l'historique local
       setTimeout(() => {
         const maintenant = new Date();
         setHistorique(prev => [
@@ -257,19 +328,20 @@ const TourDeLigneApp: React.FC = () => {
           {
             action: 'vente' as const,
             vendeur,
+            clientId,
             date: getAdjustedDateString(),
             heure: getAdjustedDate().toLocaleTimeString('fr-FR'),
-            nouvelOrdre: ordre.join(', ')
+            nouvelOrdre: ordre.join(', '),
+            message: `${vendeur} a finalisé une vente`
           }
         ]);
       }, 0);
     }
   };
 
-  // Fonctions utilitaires
+  // Fonctions utilitaires (inchangées)
   const reinitialiserTout = (): void => {
     if (window.confirm('Êtes-vous sûr de vouloir tout réinitialiser ? Tous les vendeurs et l\'historique seront supprimés.')) {
-      // Réinitialiser tous les états
       setVendeurs([]);
       setOrdre([]);
       setOrdreInitial([]);
@@ -277,10 +349,8 @@ const TourDeLigneApp: React.FC = () => {
       setJourneeActive(false);
       setVendeursData({});
       
-      // Nettoyer le localStorage
       localStorage.clear();
       
-      // Synchroniser avec le serveur
       if (isConnected) {
         sendMessage({ type: 'REINITIALISER_TOUT' });
       }
@@ -311,7 +381,6 @@ const TourDeLigneApp: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Obtenir la couleur du statut de connexion
   const getStatusColor = () => {
     switch (readyState) {
       case WebSocket.CONNECTING: return 'text-yellow-600';
@@ -326,7 +395,6 @@ const TourDeLigneApp: React.FC = () => {
     <div className="p-4 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-center">Gestion du Tour de Ligne</h1>
       
-      {/* Indicateur de statut WebSocket */}
       <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-center">
           <span className="font-medium mr-2">Synchronisation: </span>
@@ -355,6 +423,14 @@ const TourDeLigneApp: React.FC = () => {
             ordreInitial={ordreInitial}
             vendeursData={vendeursData}
             onTerminerJournee={terminerJournee}
+          />
+          
+          {/* NOUVEAU: Composant de gestion des clients */}
+          <GestionClients
+            ordre={ordre}
+            vendeursData={vendeursData}
+            onPrendreClient={prendreClient}
+            onAbandonnerClient={abandonnerClient}
           />
           
           <EnregistrementVentes 
