@@ -32,6 +32,13 @@ function initDatabase() {
       )
     `);
 
+    db.run(`
+      CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `);
+
     // Table de l'historique
     db.run(`
       CREATE TABLE IF NOT EXISTS historique (
@@ -330,7 +337,7 @@ app.post('/api/terminer-journee', (req, res) => {
   const maintenant = getAdjustedDate();
 
   db.serialize(() => {
-    // Remettre tous les compteurs à zéro
+    // Remettre tous les compteurs à zéro SANS supprimer les vendeurs
     db.run(
       `UPDATE vendeurs 
        SET ventes = 0, client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL`

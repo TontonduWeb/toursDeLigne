@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useRestApi } from '../hooks/useRestApi';
 import { HistoriqueItem, VendeurData } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
@@ -11,11 +10,9 @@ import ActionButtons from './ActionButtons';
 import { trierOrdreVendeurs } from '../services/vendeurService';
 
 const TourDeLigneApp: React.FC = () => {
-  // États locaux (pour configuration uniquement)
-  const [vendeurs, setVendeurs] = useLocalStorage<string[]>('vendeurs', []);
-  const [journeeActive, setJourneeActive] = useLocalStorage<boolean>('journeeActive', false);
-  
-  // États synchronisés avec le serveur
+  // États synchronisés avec le serveur (plus de localStorage)
+  const [vendeurs, setVendeurs] = useState<string[]>([]);
+  const [journeeActive, setJourneeActive] = useState<boolean>(false);
   const [ordreInitial, setOrdreInitial] = useState<string[]>([]);
   const [ordre, setOrdre] = useState<string[]>([]);
   const [historique, setHistorique] = useState<HistoriqueItem[]>([]);
@@ -26,7 +23,7 @@ const TourDeLigneApp: React.FC = () => {
     baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:8082',
     pollingInterval: 3000,
     onStateUpdate: (serverState) => {
-      console.log('📥 État serveur reçu:', serverState);
+      console.log('🔥 État serveur reçu:', serverState);
       
       // Mettre à jour les vendeurs
       if (serverState.vendeurs && serverState.vendeurs.length > 0) {
@@ -52,6 +49,16 @@ const TourDeLigneApp: React.FC = () => {
         );
         setOrdre(nouveauOrdre);
         setOrdreInitial(vendeurNames);
+        
+        // Déterminer si la journée est active (si des vendeurs existent)
+        setJourneeActive(vendeurNames.length > 0);
+      } else {
+        // Aucun vendeur = pas de journée active
+        setVendeurs([]);
+        setJourneeActive(false);
+        setOrdre([]);
+        setOrdreInitial([]);
+        setVendeursData({});
       }
       
       // Mettre à jour l'historique
@@ -90,17 +97,12 @@ const TourDeLigneApp: React.FC = () => {
 
   const ajouterVendeur = (vendeur: string): void => {
     if (!vendeurs.includes(vendeur)) {
-      const updatedVendeurs = [...vendeurs, vendeur];
-      setVendeurs(updatedVendeurs);
+      setVendeurs([...vendeurs, vendeur]);
     }
   };
 
   const supprimerVendeur = (vendeur: string): void => {
     setVendeurs(vendeurs.filter(v => v !== vendeur));
-    if (journeeActive) {
-      setOrdre(ordre.filter(v => v !== vendeur));
-      setOrdreInitial(ordreInitial.filter(v => v !== vendeur));
-    }
   };
 
   const demarrerJournee = async (): Promise<void> => {
@@ -111,9 +113,7 @@ const TourDeLigneApp: React.FC = () => {
 
     try {
       await actions.demarrerJournee(vendeurs);
-      setJourneeActive(true);
-      setOrdreInitial([...vendeurs]);
-      setOrdre([...vendeurs]);
+      // L'état sera mis à jour automatiquement via le polling
     } catch (err) {
       alert('Erreur lors du démarrage de la journée');
       console.error(err);
@@ -124,9 +124,7 @@ const TourDeLigneApp: React.FC = () => {
     if (window.confirm('Êtes-vous sûr de vouloir terminer la journée ? L\'ordre sera réinitialisé.')) {
       try {
         await actions.terminerJournee();
-        setJourneeActive(false);
-        setOrdre([]);
-        setOrdreInitial([]);
+        // L'état sera mis à jour automatiquement via le polling
       } catch (err) {
         alert('Erreur lors de la fin de journée');
         console.error(err);
@@ -177,13 +175,7 @@ const TourDeLigneApp: React.FC = () => {
     if (window.confirm('Êtes-vous sûr de vouloir tout réinitialiser ? Tous les vendeurs et l\'historique seront supprimés.')) {
       try {
         await actions.reinitialiser();
-        setVendeurs([]);
-        setOrdre([]);
-        setOrdreInitial([]);
-        setHistorique([]);
-        setJourneeActive(false);
-        setVendeursData({});
-        localStorage.clear();
+        // L'état sera mis à jour automatiquement via le polling
       } catch (err) {
         alert('Erreur lors de la réinitialisation');
         console.error(err);
