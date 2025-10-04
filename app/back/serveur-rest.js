@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Initialiser la base de données SQLite
-const dbPath = path.join(__dirname, 'tour-de-ligne.db');
+const dbPath = path.join(__dirname,'data', 'tour-de-ligne.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ Erreur ouverture DB:', err);
