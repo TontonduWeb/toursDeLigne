@@ -184,6 +184,16 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
+  const ajouterVendeurEnCoursDeJournee = async (vendeur: string): Promise<void> => {
+  try {
+    await actions.ajouterVendeur(vendeur);
+    // L'état sera mis à jour automatiquement via le polling
+  } catch (err) {
+    alert('Erreur lors de l\'ajout du vendeur');
+    console.error(err);
+  }
+};
+
   const reinitialiserTout = async (): Promise<void> => {
     if (window.confirm('Êtes-vous sûr de vouloir tout réinitialiser ? Tous les vendeurs et l\'historique seront supprimés.')) {
       try {
@@ -275,14 +285,21 @@ const TourDeLigneApp: React.FC = () => {
           onDescendreVendeur={descendreVendeur}
           onDemarrerJournee={demarrerJournee}
         />
+        
       ) : (
-        <>
-          <GestionOrdre 
-            ordre={ordre}
-            ordreInitial={ordreInitial}
-            vendeursData={vendeursData}
-            onTerminerJournee={terminerJournee}
-          />
+  <>
+    {/* Ajout de vendeur en cours de journée */}
+    <AjoutVendeurJournee 
+      vendeursExistants={vendeurs}
+      onAjouterVendeur={ajouterVendeurEnCoursDeJournee}
+    />
+    
+    <GestionOrdre 
+      ordre={ordre}
+      ordreInitial={ordreInitial}
+      vendeursData={vendeursData}
+      onTerminerJournee={terminerJournee}
+    />
           
           <GestionClients
             ordre={ordre}

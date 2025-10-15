@@ -24,7 +24,6 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   // Statistiques et données calculées
   const minVentes = getNombreMinimumVentes(vendeursData);
   const vendeursDisponibles = getVendeursDisponibles(ordre, vendeursData);
-  const vendeursOccupes = getVendeursOccupes(ordre, vendeursData);
   const stats = calculerStatistiquesVendeurs(vendeursData);
   
   const prochainVendeurDisponible = vendeursDisponibles[0];

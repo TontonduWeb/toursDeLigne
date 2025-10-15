@@ -1,6 +1,6 @@
 // src/components/GestionClients.tsx
 import React from 'react';
-import { VendeurData, ClientEnCours } from '../types';
+import { VendeurData } from '../types';
 import { getNombreMinimumVentes } from '../services/vendeurService';
 
 interface GestionClientsProps {
