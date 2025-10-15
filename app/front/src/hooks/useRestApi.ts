@@ -133,7 +133,11 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
 
     reinitialiser: useCallback(async () => {
       return postRequest('/api/reinitialiser');
-    }, [postRequest])
+    }, [postRequest]),
+    
+    ajouterVendeur: useCallback(async (vendeur: string) => {
+    return postRequest('/api/ajouter-vendeur', { vendeur });
+  }, [postRequest]),
   };
 
   // Fonction pour obtenir les stats

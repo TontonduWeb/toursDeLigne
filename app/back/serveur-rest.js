@@ -369,6 +369,64 @@ app.post('/api/reinitialiser', (req, res) => {
   });
 });
 
+// POST /api/ajouter-vendeur - Ajouter un vendeur en cours de journée
+app.post('/api/ajouter-vendeur', (req, res) => {
+  const { vendeur } = req.body;
+
+  if (!vendeur || !vendeur.trim()) {
+    return res.status(400).json({ error: 'Nom de vendeur invalide' });
+  }
+
+  const vendeurTrim = vendeur.trim();
+
+  // Vérifier si le vendeur existe déjà
+  db.get(
+    'SELECT * FROM vendeurs WHERE nom = ?',
+    [vendeurTrim],
+    (err, existant) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (existant) {
+        return res.status(400).json({ error: 'Ce vendeur existe déjà' });
+      }
+
+      const maintenant = getAdjustedDate();
+
+      db.serialize(() => {
+        // Insérer le nouveau vendeur avec 0 ventes
+        db.run(
+          'INSERT INTO vendeurs (nom, ventes) VALUES (?, 0)',
+          [vendeurTrim],
+          (err) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+
+            // Ajouter à l'historique
+            db.run(
+              'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+              [
+                maintenant.toLocaleDateString('fr-FR'),
+                maintenant.toLocaleTimeString('fr-FR'),
+                `Vendeur ${vendeurTrim} ajouté en cours de journée`,
+                'Système'
+              ]
+            );
+
+            res.json({ 
+              success: true, 
+              message: `Vendeur ${vendeurTrim} ajouté avec succès`,
+              vendeur: vendeurTrim
+            });
+          }
+        );
+      });
+    }
+  );
+});
+
 // GET /api/stats - Statistiques
 app.get('/api/stats', (req, res) => {
   db.all('SELECT * FROM vendeurs', [], (err, vendeurs) => {

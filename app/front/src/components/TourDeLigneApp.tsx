@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRestApi } from '../hooks/useRestApi';
 import { HistoriqueItem, VendeurData } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
+import AjoutVendeurJournee from './AjoutVendeurJournee';
 import GestionOrdre from './GestionOrdre';
 import GestionClients from './GestionClients';
 import EnregistrementVentes from './EnregistrementVentes';
