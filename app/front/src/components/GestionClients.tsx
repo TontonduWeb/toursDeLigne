@@ -125,19 +125,45 @@ const GestionClients: React.FC<GestionClientsProps> = ({
   );
 };
 
-// Fonction utilitaire pour calculer la durée
+// Fonction utilitaire pour calculer la durée - VERSION CORRIGÉE
 function calculerDuree(dateDebut: string, heureDebut: string): string {
-  const debut = new Date(`${dateDebut} ${heureDebut}`);
-  const maintenant = new Date();
-  const diffMs = maintenant.getTime() - debut.getTime();
-  const minutes = Math.floor(diffMs / (1000 * 60));
-  
-  if (minutes < 1) return "< 1min";
-  if (minutes < 60) return `${minutes}min`;
-  
-  const heures = Math.floor(minutes / 60);
-  const minutesRestantes = minutes % 60;
-  return `${heures}h${minutesRestantes.toString().padStart(2, '0')}`;
+  try {
+    // Parsing robuste de la date et heure
+    // Format attendu: dateDebut = "15/10/2025", heureDebut = "14:30:25"
+    const [jour, mois, annee] = dateDebut.split('/');
+    const [heures, minutes, secondes] = heureDebut.split(':');
+    
+    // Créer la date de début avec le format ISO
+    const debut = new Date(
+      parseInt(annee),
+      parseInt(mois) - 1, // Les mois commencent à 0
+      parseInt(jour),
+      parseInt(heures),
+      parseInt(minutes),
+      parseInt(secondes || '0')
+    );
+    
+    // Vérifier que la date est valide
+    if (isNaN(debut.getTime())) {
+      console.error('Date invalide:', { dateDebut, heureDebut });
+      return "Erreur";
+    }
+    
+    const maintenant = new Date();
+    const diffMs = maintenant.getTime() - debut.getTime();
+    const minutes_totales = Math.floor(diffMs / (1000 * 60));
+    
+    if (minutes_totales < 0) return "0min";
+    if (minutes_totales < 1) return "< 1min";
+    if (minutes_totales < 60) return `${minutes_totales}min`;
+    
+    const heures_ecoulees = Math.floor(minutes_totales / 60);
+    const minutesRestantes = minutes_totales % 60;
+    return `${heures_ecoulees}h${minutesRestantes.toString().padStart(2, '0')}`;
+  } catch (error) {
+    console.error('Erreur calcul durée:', error, { dateDebut, heureDebut });
+    return "Erreur";
+  }
 }
 
 export default GestionClients;
