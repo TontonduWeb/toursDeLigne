@@ -25,9 +25,6 @@ const TourDeLigneApp: React.FC = () => {
     onStateUpdate: (serverState) => {
       console.log('🔥 État serveur reçu:', serverState);
       
-      // NE PAS mettre à jour l'état local si nous sommes en mode configuration (journée non active)
-      // Cela permet d'ajouter des vendeurs localement avant de démarrer
-      
       // Mettre à jour UNIQUEMENT si le serveur a des vendeurs (journée démarrée côté serveur)
       if (serverState.vendeurs && serverState.vendeurs.length > 0) {
         const vendeurNames = serverState.vendeurs.map(v => v.nom);
@@ -54,10 +51,7 @@ const TourDeLigneApp: React.FC = () => {
         
         setOrdre(nouveauOrdre);
         setOrdreInitial(vendeurNames);
-        
       }
-      // Si le serveur n'a pas de vendeurs, on ne fait RIEN
-      // Cela préserve l'état local pendant la phase de configuration
       
       // Mettre à jour l'historique (toujours, même sans vendeurs)
       if (serverState.historique) {
@@ -101,6 +95,26 @@ const TourDeLigneApp: React.FC = () => {
 
   const supprimerVendeur = (vendeur: string): void => {
     setVendeurs(vendeurs.filter(v => v !== vendeur));
+  };
+
+  // NOUVEAU : Monter un vendeur dans l'ordre
+  const monterVendeur = (index: number): void => {
+    if (index > 0) {
+      const nouveauVendeurs = [...vendeurs];
+      [nouveauVendeurs[index - 1], nouveauVendeurs[index]] = 
+      [nouveauVendeurs[index], nouveauVendeurs[index - 1]];
+      setVendeurs(nouveauVendeurs);
+    }
+  };
+
+  // NOUVEAU : Descendre un vendeur dans l'ordre
+  const descendreVendeur = (index: number): void => {
+    if (index < vendeurs.length - 1) {
+      const nouveauVendeurs = [...vendeurs];
+      [nouveauVendeurs[index], nouveauVendeurs[index + 1]] = 
+      [nouveauVendeurs[index + 1], nouveauVendeurs[index]];
+      setVendeurs(nouveauVendeurs);
+    }
   };
 
   const demarrerJournee = async (): Promise<void> => {
@@ -256,6 +270,8 @@ const TourDeLigneApp: React.FC = () => {
           vendeurs={vendeurs}
           onAjouterVendeur={ajouterVendeur}
           onSupprimerVendeur={supprimerVendeur}
+          onMonterVendeur={monterVendeur}
+          onDescendreVendeur={descendreVendeur}
           onDemarrerJournee={demarrerJournee}
         />
       ) : (
