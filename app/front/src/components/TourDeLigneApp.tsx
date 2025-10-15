@@ -25,11 +25,14 @@ const TourDeLigneApp: React.FC = () => {
     onStateUpdate: (serverState) => {
       console.log('🔥 État serveur reçu:', serverState);
       
-      // Mettre à jour les vendeurs
+      // NE PAS mettre à jour l'état local si nous sommes en mode configuration (journée non active)
+      // Cela permet d'ajouter des vendeurs localement avant de démarrer
+      
+      // Mettre à jour UNIQUEMENT si le serveur a des vendeurs (journée démarrée côté serveur)
       if (serverState.vendeurs && serverState.vendeurs.length > 0) {
         const vendeurNames = serverState.vendeurs.map(v => v.nom);
         setVendeurs(vendeurNames);
-	setJourneeActive(true);
+        setJourneeActive(true);
         
         // Convertir en format local
         const vendeursDataLocal: Record<string, VendeurData> = {};
@@ -48,21 +51,15 @@ const TourDeLigneApp: React.FC = () => {
           vendeurNames,
           vendeursDataLocal
         );
+        
         setOrdre(nouveauOrdre);
         setOrdreInitial(vendeurNames);
         
-        // Déterminer si la journée est active (si des vendeurs existent)
-        setJourneeActive(vendeurNames.length > 0);
-      } else {
-        // Aucun vendeur = pas de journée active
-        setVendeurs([]);
-        setJourneeActive(false);
-        setOrdre([]);
-        setOrdreInitial([]);
-        setVendeursData({});
       }
+      // Si le serveur n'a pas de vendeurs, on ne fait RIEN
+      // Cela préserve l'état local pendant la phase de configuration
       
-      // Mettre à jour l'historique
+      // Mettre à jour l'historique (toujours, même sans vendeurs)
       if (serverState.historique) {
         const historiqueLocal: HistoriqueItem[] = serverState.historique.map(h => ({
           action: h.action.includes('Vente') ? 'vente' :
