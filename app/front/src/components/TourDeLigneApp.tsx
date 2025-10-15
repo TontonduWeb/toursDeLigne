@@ -20,8 +20,8 @@ const TourDeLigneApp: React.FC = () => {
 
   // Hook REST API avec polling
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
-    baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:8082',
-    pollingInterval: 3000,
+    baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
+    pollingInterval: 10000,
     onStateUpdate: (serverState) => {
       console.log('🔥 État serveur reçu:', serverState);
       
@@ -29,6 +29,7 @@ const TourDeLigneApp: React.FC = () => {
       if (serverState.vendeurs && serverState.vendeurs.length > 0) {
         const vendeurNames = serverState.vendeurs.map(v => v.nom);
         setVendeurs(vendeurNames);
+	setJourneeActive(true);
         
         // Convertir en format local
         const vendeursDataLocal: Record<string, VendeurData> = {};
