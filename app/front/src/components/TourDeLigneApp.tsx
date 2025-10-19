@@ -41,6 +41,34 @@ const TourDeLigneApp: React.FC = () => {
       // On ne change rien, la fonction terminerJournee() gère déjà ça
       return;
     }
+
+    const terminerJournee = async (): Promise<void> => {
+  console.log('🔴 DEBUT terminerJournee - journeeActive:', journeeActive);
+  
+  const confirmation = window.confirm(/* ... */);
+  if (!confirmation) return;
+
+  try {
+    const result = await actions.terminerJournee();
+    console.log('🔴 Résultat terminerJournee:', result);
+    
+    if (result.success && result.exportData) {
+      // ... export ...
+      
+      console.log('🔴 AVANT setJourneeActive(false)');
+      setJourneeActive(false);
+      console.log('🔴 APRES setJourneeActive(false)');
+      
+      setOrdre([]);
+      setOrdreInitial([]);
+      setVendeursData({});
+      
+      console.log('🔴 États réinitialisés');
+    }
+  } catch (err) {
+    console.error('🔴 ERREUR:', err);
+  }
+};
     
     setVendeurs(vendeurNames);
     setJourneeActive(true);
