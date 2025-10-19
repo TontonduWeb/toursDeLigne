@@ -447,5 +447,4 @@ const terminerJournee = async (): Promise<void> => {
     </div>
   );
 };
-
 export default TourDeLigneApp;

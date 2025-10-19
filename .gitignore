@@ -1,6 +1,0 @@
-node_modules/
-*.db
-.env
-.env.*
-playwright-report/
-test-results/

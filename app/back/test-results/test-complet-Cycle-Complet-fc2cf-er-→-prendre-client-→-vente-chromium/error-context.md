@@ -1,0 +1,95 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - heading "Gestion du Tour de Ligne" [level=1] [ref=e4]
+  - generic [ref=e6]:
+    - generic [ref=e7]: "Synchronisation:"
+    - generic [ref=e8]: En ligne
+    - button "🔄 Actualiser" [ref=e9] [cursor=pointer]
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - heading "👤 Ajouter un vendeur" [level=2] [ref=e12]
+      - button "+ Nouveau vendeur" [ref=e13] [cursor=pointer]
+    - paragraph [ref=e14]: Vous pouvez ajouter de nouveaux vendeurs pendant la journée. Ils seront placés en priorité dans l'ordre.
+  - generic [ref=e15]:
+    - generic [ref=e16]:
+      - heading "État de l'Équipe" [level=2] [ref=e17]
+      - button "Terminer la Journée" [ref=e18] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: "2"
+        - generic [ref=e22]: Vendeurs total
+      - generic [ref=e23]:
+        - generic [ref=e24]: "2"
+        - generic [ref=e25]: Disponibles
+      - generic [ref=e26]:
+        - generic [ref=e27]: "0"
+        - generic [ref=e28]: Avec clients
+      - generic [ref=e29]:
+        - generic [ref=e30]: "0"
+        - generic [ref=e31]: Ventes totales
+    - generic [ref=e32]:
+      - heading "Prochain vendeur disponible" [level=3] [ref=e33]
+      - generic [ref=e34]: Alice
+      - generic [ref=e35]: 0 vente(s)
+    - heading "Ordre complet (disponibles puis occupés)" [level=3] [ref=e36]
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - generic [ref=e40]: 1. Alice
+          - generic [ref=e41]: (0 ventes)
+          - generic [ref=e42]: minimum
+        - generic [ref=e44]: ✅ Disponible
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: 2. Bob
+          - generic [ref=e48]: (0 ventes)
+          - generic [ref=e49]: minimum
+        - generic [ref=e51]: ✅ Disponible
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - heading "Règles de priorité :" [level=4] [ref=e54]
+        - list [ref=e55]:
+          - listitem [ref=e56]: • Seuls les vendeurs disponibles peuvent prendre des clients
+          - listitem [ref=e57]: • Priorité aux vendeurs avec le moins de ventes (0)
+          - listitem [ref=e58]: • En cas d'égalité, l'ordre initial est respecté
+          - listitem [ref=e59]: • Les vendeurs occupés restent en fin de liste
+      - generic [ref=e60]:
+        - heading "Répartition actuelle :" [level=4] [ref=e61]
+        - generic [ref=e62]:
+          - generic [ref=e63]: "📊 Moyenne de ventes: 0"
+          - generic [ref=e64]: "🎯 Objectif d'équilibrage: 0 ventes minimum"
+          - generic [ref=e65]: "⏱️ Vendeurs en cours: 0/2"
+  - generic [ref=e66]:
+    - heading "Gestion des Clients" [level=2] [ref=e67]
+    - generic [ref=e68]:
+      - heading "Prochain vendeur disponible" [level=3] [ref=e69]
+      - generic [ref=e70]: Alice
+      - button "Prendre un client" [ref=e71] [cursor=pointer]
+    - generic [ref=e72]:
+      - heading "Vendeurs en attente" [level=3] [ref=e73]
+      - generic [ref=e75]: 2. Bob (0)(min)
+  - generic [ref=e76]:
+    - heading "Enregistrer une Vente" [level=2] [ref=e77]
+    - paragraph [ref=e78]: "Sélectionnez le vendeur qui a finalisé une vente avec son client :"
+    - paragraph [ref=e80]:
+      - text: Aucun vendeur n'a de client en cours.
+      - text: Les vendeurs doivent d'abord prendre un client en charge.
+  - generic [ref=e81]:
+    - heading "Historique" [level=2] [ref=e82]
+    - table [ref=e84]:
+      - rowgroup [ref=e85]:
+        - row "Date Heure Action" [ref=e86]:
+          - cell "Date" [ref=e87]
+          - cell "Heure" [ref=e88]
+          - cell "Action" [ref=e89]
+      - rowgroup [ref=e90]:
+        - row "20/10/2025 01:42:23 🚀 Démarrage journée" [ref=e91]:
+          - cell "20/10/2025" [ref=e92]
+          - cell "01:42:23" [ref=e93]
+          - cell "🚀 Démarrage journée" [ref=e94]
+  - generic [ref=e95]:
+    - button "Exporter les données" [ref=e96] [cursor=pointer]
+    - button "🗑️ Réinitialiser tout (RAZ complète)" [ref=e97] [cursor=pointer]
+```
