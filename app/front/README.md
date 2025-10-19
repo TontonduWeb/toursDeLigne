@@ -1,3 +1,7 @@
+# Lors du développement lancer le script ./deploy.sh
+cd ~/docker-services/tours-de-ligne/app/front/deploy.sh
+./deploy.sh
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
