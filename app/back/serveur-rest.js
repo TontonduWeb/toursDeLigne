@@ -333,6 +333,7 @@ app.post('/api/enregistrer-vente', (req, res) => {
 });
 
 // POST /api/terminer-journee - Terminer la journée
+// POST /api/terminer-journee - Terminer et clôturer la journée
 app.post('/api/terminer-journee', (req, res) => {
   const maintenant = getAdjustedDate();
 
@@ -380,38 +381,26 @@ app.post('/api/terminer-journee', (req, res) => {
           }))
         };
 
-        // Ajouter l'action de clôture à l'historique
-        db.run(
-          'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
-          [
-            maintenant.toLocaleDateString('fr-FR'),
-            maintenant.toLocaleTimeString('fr-FR'),
-            `Journée clôturée - ${totalVentes} ventes totales`,
-            'Système'
-          ],
-          (err) => {
+        // ✅ SUPPRIMER les vendeurs
+        db.run(`DELETE FROM vendeurs`, (err) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          // ✅ SUPPRIMER l'historique
+          db.run(`DELETE FROM historique`, (err) => {
             if (err) {
               return res.status(500).json({ error: err.message });
             }
 
-            // Remettre tous les compteurs à zéro
-            db.run(
-              `UPDATE vendeurs 
-               SET ventes = 0, client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL`,
-              (err) => {
-                if (err) {
-                  return res.status(500).json({ error: err.message });
-                }
-
-                res.json({ 
-                  success: true, 
-                  message: 'Journée clôturée avec succès',
-                  exportData: exportData
-                });
-              }
-            );
-          }
-        );
+            console.log('✅ Journée clôturée - Vendeurs et historique supprimés');
+            res.json({ 
+              success: true, 
+              message: 'Journée clôturée avec succès',
+              exportData: exportData
+            });
+          });
+        });
       });
     });
   });

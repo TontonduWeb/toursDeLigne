@@ -153,6 +153,7 @@ const terminerJournee = async (): Promise<void> => {
     '✓ Un export automatique sera généré\n' +
     '✓ Les compteurs seront remis à zéro\n' +
     '✓ L\'ordre sera réinitialisé\n' +
+    '✓ L\'historique sera effacé\n' +
     '✓ Vous ne pourrez plus enregistrer de ventes pour cette journée\n\n' +
     'Pour continuer, cliquez sur OK.'
   );
@@ -161,11 +162,11 @@ const terminerJournee = async (): Promise<void> => {
 
   try {
     const result = await actions.terminerJournee();
-    
+
     if (result.success && result.exportData) {
       // Télécharger automatiquement l'export
-      const blob = new Blob([JSON.stringify(result.exportData, null, 2)], { 
-        type: 'application/json' 
+      const blob = new Blob([JSON.stringify(result.exportData, null, 2)], {
+        type: 'application/json'
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -179,22 +180,23 @@ const terminerJournee = async (): Promise<void> => {
       // Afficher le récapitulatif
       setRecapitulatifJournee(result.exportData);
       setAfficherRecapitulatif(true);
-      
-      // NOUVEAU : Réinitialiser l'état de l'application
+
+      // Réinitialiser l'état de l'application
       setJourneeActive(false);
       setOrdre([]);
       setOrdreInitial([]);
       setVendeursData({});
-      // Garder la liste des vendeurs pour pouvoir redémarrer facilement
-      // setVendeurs([]);  // Décommente si tu veux aussi vider la liste
-      
+      setVendeurs([]);  // ✅ Vider aussi la liste des vendeurs
+      setHistorique([]); // ✅ Vider l'historique local
+
       // Message de succès
       alert(
         '✅ Journée clôturée avec succès !\n\n' +
         `📊 Total des ventes : ${result.exportData.statistiques.totalVentes}\n` +
         `👥 Nombre de vendeurs : ${result.exportData.statistiques.totalVendeurs}\n` +
         `📈 Moyenne par vendeur : ${result.exportData.statistiques.moyenneVentes}\n\n` +
-        '💾 L\'export a été téléchargé automatiquement.\n\n' +
+        '💾 L\'export a été téléchargé automatiquement.\n' +
+        '🗑️ L\'historique a été effacé.\n\n' +
         '🔄 Vous pouvez maintenant redémarrer une nouvelle journée.'
       );
     }
