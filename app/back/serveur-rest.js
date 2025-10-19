@@ -337,24 +337,83 @@ app.post('/api/terminer-journee', (req, res) => {
   const maintenant = getAdjustedDate();
 
   db.serialize(() => {
-    // Remettre tous les compteurs à zéro SANS supprimer les vendeurs
-    db.run(
-      `UPDATE vendeurs 
-       SET ventes = 0, client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL`
-    );
+    // Récupérer toutes les données avant la clôture
+    db.all('SELECT * FROM vendeurs', [], (err, vendeurs) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
 
-    // Ajouter à l'historique
-    db.run(
-      'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
-      [
-        maintenant.toLocaleDateString('fr-FR'),
-        maintenant.toLocaleTimeString('fr-FR'),
-        'Journée terminée - Remise à zéro',
-        'Système'
-      ]
-    );
+      db.all('SELECT * FROM historique ORDER BY timestamp DESC', [], (err, historique) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
 
-    res.json({ success: true, message: 'Journée terminée' });
+        // Calculer les statistiques finales
+        const totalVentes = vendeurs.reduce((sum, v) => sum + v.ventes, 0);
+        const vendeursData = vendeurs.map(v => ({
+          nom: v.nom,
+          ventes: v.ventes,
+          clientEnCours: v.client_id ? {
+            id: v.client_id,
+            heureDebut: v.client_heure_debut,
+            dateDebut: v.client_date_debut
+          } : null
+        }));
+
+        // Créer l'export de données
+        const exportData = {
+          dateClôture: maintenant.toLocaleDateString('fr-FR'),
+          heureClôture: maintenant.toLocaleTimeString('fr-FR'),
+          timestamp: maintenant.toISOString(),
+          statistiques: {
+            totalVendeurs: vendeurs.length,
+            totalVentes: totalVentes,
+            moyenneVentes: vendeurs.length > 0 ? (totalVentes / vendeurs.length).toFixed(2) : 0
+          },
+          vendeurs: vendeursData,
+          historique: historique.map(h => ({
+            date: h.date,
+            heure: h.heure,
+            action: h.action,
+            vendeur: h.vendeur,
+            clientId: h.client_id
+          }))
+        };
+
+        // Ajouter l'action de clôture à l'historique
+        db.run(
+          'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+          [
+            maintenant.toLocaleDateString('fr-FR'),
+            maintenant.toLocaleTimeString('fr-FR'),
+            `Journée clôturée - ${totalVentes} ventes totales`,
+            'Système'
+          ],
+          (err) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+
+            // Remettre tous les compteurs à zéro
+            db.run(
+              `UPDATE vendeurs 
+               SET ventes = 0, client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL`,
+              (err) => {
+                if (err) {
+                  return res.status(500).json({ error: err.message });
+                }
+
+                res.json({ 
+                  success: true, 
+                  message: 'Journée clôturée avec succès',
+                  exportData: exportData
+                });
+              }
+            );
+          }
+        );
+      });
+    });
   });
 });
 

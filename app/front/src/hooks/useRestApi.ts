@@ -1,5 +1,28 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+interface ExportData {
+  dateClôture: string;
+  heureClôture: string;
+  timestamp: string;
+  statistiques: {
+    totalVendeurs: number;
+    totalVentes: number;
+    moyenneVentes: string;
+  };
+  vendeurs: Array<{
+    nom: string;
+    ventes: number;
+    clientEnCours: any;
+  }>;
+  historique: Array<any>;
+}
+
+interface TerminerJourneeResponse {
+  success: boolean;
+  message: string;
+  exportData: ExportData;
+}
+
 interface ServerState {
   ordreActuel: {
     prochainVendeur: string | null;
@@ -127,8 +150,9 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
       return postRequest('/api/enregistrer-vente', { vendeur });
     }, [postRequest]),
 
-    terminerJournee: useCallback(async () => {
-      return postRequest('/api/terminer-journee');
+    terminerJournee: useCallback(async (): Promise<TerminerJourneeResponse> => {
+      const response = await postRequest('/api/terminer-journee');
+      return response as TerminerJourneeResponse;
     }, [postRequest]),
 
     reinitialiser: useCallback(async () => {

@@ -9,6 +9,7 @@ import EnregistrementVentes from './EnregistrementVentes';
 import HistoriqueVentes from './HistoriqueVentes';
 import ActionButtons from './ActionButtons';
 import { trierOrdreVendeurs } from '../services/vendeurService';
+import RecapitulatifJournee from './RecapitulatifJournee';
 
 const TourDeLigneApp: React.FC = () => {
   // États synchronisés avec le serveur (plus de localStorage)
@@ -18,6 +19,8 @@ const TourDeLigneApp: React.FC = () => {
   const [ordre, setOrdre] = useState<string[]>([]);
   const [historique, setHistorique] = useState<HistoriqueItem[]>([]);
   const [vendeursData, setVendeursData] = useState<Record<string, VendeurData>>({});
+  const [recapitulatifJournee, setRecapitulatifJournee] = useState<any>(null);
+  const [afficherRecapitulatif, setAfficherRecapitulatif] = useState<boolean>(false);
 
   // Hook REST API avec polling
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
@@ -133,17 +136,54 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
-  const terminerJournee = async (): Promise<void> => {
-    if (window.confirm('Êtes-vous sûr de vouloir terminer la journée ? L\'ordre sera réinitialisé.')) {
-      try {
-        await actions.terminerJournee();
-        // L'état sera mis à jour automatiquement via le polling
-      } catch (err) {
-        alert('Erreur lors de la fin de journée');
-        console.error(err);
-      }
+    const terminerJournee = async (): Promise<void> => {
+  const confirmation = window.confirm(
+    '⚠️ ATTENTION - Action irréversible\n\n' +
+    'Êtes-vous sûr de vouloir CLÔTURER la journée ?\n\n' +
+    '✓ Un export automatique sera généré\n' +
+    '✓ Les compteurs seront remis à zéro\n' +
+    '✓ L\'ordre sera réinitialisé\n' +
+    '✓ Vous ne pourrez plus enregistrer de ventes pour cette journée\n\n' +
+    'Pour continuer, cliquez sur OK.'
+  );
+
+  if (!confirmation) return;
+
+  try {
+    const result = await actions.terminerJournee();
+    
+    if (result.success && result.exportData) {
+      // Télécharger automatiquement l'export
+      const blob = new Blob([JSON.stringify(result.exportData, null, 2)], { 
+        type: 'application/json' 
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cloture-journee-${result.exportData.dateClôture.replace(/\//g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Afficher le récapitulatif
+      setRecapitulatifJournee(result.exportData);
+      setAfficherRecapitulatif(true);
+      
+      // Message de succès
+      alert(
+        '✅ Journée clôturée avec succès !\n\n' +
+        `📊 Total des ventes : ${result.exportData.statistiques.totalVentes}\n` +
+        `👥 Nombre de vendeurs : ${result.exportData.statistiques.totalVendeurs}\n` +
+        `📈 Moyenne par vendeur : ${result.exportData.statistiques.moyenneVentes}\n\n` +
+        '💾 L\'export a été téléchargé automatiquement.'
+      );
     }
-  };
+  } catch (err) {
+    alert('❌ Erreur lors de la clôture de la journée');
+    console.error(err);
+  }
+};
 
   const prendreClient = async (vendeur: string): Promise<void> => {
     if (!journeeActive || !ordre.includes(vendeur) || vendeursData[vendeur]?.clientEnCours) {
@@ -337,6 +377,16 @@ const TourDeLigneApp: React.FC = () => {
           <p className="text-sm">⏳ Synchronisation...</p>
         </div>
       )}
+      {/* Récapitulatif de journée */}
+      {afficherRecapitulatif && recapitulatifJournee && (
+        <RecapitulatifJournee
+          exportData={recapitulatifJournee}
+          onFermer={() => {
+            setAfficherRecapitulatif(false);
+            setRecapitulatifJournee(null);
+          }}
+  />
+)}
     </div>
   );
 };
