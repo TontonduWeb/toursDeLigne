@@ -29,23 +29,19 @@ const TourDeLigneApp: React.FC = () => {
     onStateUpdate: (serverState) => {
   console.log('🔥 État serveur reçu:', serverState);
   
-  // ⚠️ NE PAS réactiver journeeActive si on vient de terminer
-  // Vérifier si tous les vendeurs ont 0 ventes = journée vient d'être terminée
   if (serverState.vendeurs && serverState.vendeurs.length > 0) {
     const tousAZero = serverState.vendeurs.every(v => v.ventes === 0 && !v.clientEnCours);
     
-    // Si tous à zéro et journée était active, on ne fait rien (clôture en cours)
     if (tousAZero && journeeActive) {
       console.log('⚠️ Journée terminée détectée - pas de réactivation');
       return;
     }
     
-    // Sinon continuer normalement
     const vendeurNames = serverState.vendeurs.map(v => v.nom);
     setVendeurs(vendeurNames);
     setJourneeActive(true);
     
-    // Convertir en format local
+    // ✅ Convertir en format local avec logs
     const vendeursDataLocal: Record<string, VendeurData> = {};
     serverState.vendeurs.forEach(v => {
       vendeursDataLocal[v.nom] = {
@@ -53,7 +49,9 @@ const TourDeLigneApp: React.FC = () => {
         compteurVentes: v.ventes,
         clientEnCours: v.clientEnCours || undefined
       };
+      console.log(`Vendeur ${v.nom}:`, v.ventes, 'ventes, client:', !!v.clientEnCours);
     });
+    
     setVendeursData(vendeursDataLocal);
     
     // Mettre à jour l'ordre
@@ -220,31 +218,69 @@ const terminerJournee = async (): Promise<void> => {
   };
 
   const abandonnerClient = async (vendeur: string): Promise<void> => {
-    if (!journeeActive || !vendeursData[vendeur]?.clientEnCours) {
-      return;
-    }
+  // ✅ Vérifier l'état ACTUEL du vendeur avant d'agir
+  const vendeurActuel = vendeursData[vendeur];
+  
+  if (!journeeActive) {
+    console.warn('Journée non active');
+    return;
+  }
+  
+  if (!vendeurActuel) {
+    console.warn('Vendeur introuvable:', vendeur);
+    alert('Erreur: Vendeur introuvable');
+    return;
+  }
+  
+  if (!vendeurActuel.clientEnCours) {
+    console.warn('Aucun client en cours pour:', vendeur);
+    alert('Ce vendeur n\'a pas de client en cours');
+    return;
+  }
 
-    try {
-      await actions.abandonnerClient(vendeur);
-    } catch (err) {
-      alert('Erreur lors de l\'abandon du client');
-      console.error(err);
-    }
-  };
+  try {
+    console.log('Abandon client pour:', vendeur, vendeurActuel.clientEnCours);
+    await actions.abandonnerClient(vendeur);
+    
+    // ✅ Forcer un refresh immédiat
+    await refresh();
+  } catch (err) {
+    console.error('Erreur abandon:', err);
+    alert(`Erreur lors de l'abandon du client: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+  }
+};
 
   const enregistrerVente = async (vendeur: string): Promise<void> => {
-    if (!journeeActive || !ordre.includes(vendeur) || !vendeursData[vendeur]?.clientEnCours) {
-      return;
-    }
+  const vendeurActuel = vendeursData[vendeur];
+  
+  if (!journeeActive) {
+    console.warn('Journée non active');
+    return;
+  }
+  
+  if (!vendeurActuel) {
+    console.warn('Vendeur introuvable:', vendeur);
+    alert('Erreur: Vendeur introuvable');
+    return;
+  }
+  
+  if (!vendeurActuel.clientEnCours) {
+    console.warn('Aucun client en cours pour:', vendeur);
+    alert('Ce vendeur n\'a pas de client en cours');
+    return;
+  }
 
-    try {
-      await actions.enregistrerVente(vendeur);
-    } catch (err) {
-      alert('Erreur lors de l\'enregistrement de la vente');
-      console.error(err);
-    }
-  };
-
+  try {
+    console.log('Enregistrement vente pour:', vendeur, vendeurActuel.clientEnCours);
+    await actions.enregistrerVente(vendeur);
+    
+    // ✅ Forcer un refresh immédiat
+    await refresh();
+  } catch (err) {
+    console.error('Erreur vente:', err);
+    alert(`Erreur lors de l'enregistrement de la vente: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+  }
+};
   const ajouterVendeurEnCoursDeJournee = async (vendeur: string): Promise<void> => {
   try {
     await actions.ajouterVendeur(vendeur);

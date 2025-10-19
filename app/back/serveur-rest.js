@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const { getAdjustedDate } = require('./utils/dateUtils');
 
 const app = express();
 app.use(cors());
@@ -13,7 +14,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ Erreur ouverture DB:', err);
   } else {
-    console.log('✅ Base de données SQLite connectée');
     initDatabase();
   }
 });
@@ -60,11 +60,6 @@ function initDatabase() {
       )
     `);
   });
-}
-
-// Fonction utilitaire pour obtenir la date ajustée
-function getAdjustedDate() {
-  return new Date(Date.now() + 2 * 60 * 60 * 1000);
 }
 
 // Fonction pour générer un ID client
@@ -132,39 +127,65 @@ app.get('/api/state', (req, res) => {
 
 // POST /api/demarrer-journee - Démarrer une nouvelle journée
 app.post('/api/demarrer-journee', (req, res) => {
-  const { vendeurs } = req.body;
+  const { vendeurs } = req.body; // ✅ Déclarer AVANT d'utiliser
 
   if (!Array.isArray(vendeurs) || vendeurs.length === 0) {
     return res.status(400).json({ error: 'Liste de vendeurs invalide' });
   }
 
+  if (vendeurs.length > 20) {
+    return res.status(400).json({ error: 'Maximum 20 vendeurs autorisés' });
+  }
+
   db.serialize(() => {
-    // Supprimer tous les vendeurs existants
+    // 1. Supprimer tous les vendeurs existants
     db.run('DELETE FROM vendeurs', (err) => {
       if (err) {
+        console.error('Erreur suppression vendeurs:', err);
         return res.status(500).json({ error: err.message });
       }
 
-      // Insérer les nouveaux vendeurs
-      const stmt = db.prepare('INSERT INTO vendeurs (nom, ventes) VALUES (?, 0)');
-      vendeurs.forEach(nom => {
-        stmt.run(nom);
+      // 2. Insérer les nouveaux vendeurs UN PAR UN
+      let inserted = 0;
+      const errors = [];
+
+      vendeurs.forEach((nom, index) => {
+        db.run('INSERT INTO vendeurs (nom, ventes) VALUES (?, 0)', [nom], (err) => {
+          if (err) {
+            errors.push(err.message);
+          }
+
+          inserted++;
+          console.log(`✅ Vendeur ${nom} inséré (${inserted}/${vendeurs.length})`);
+
+          // 3. Une fois tous insérés, ajouter à l'historique et répondre
+          if (inserted === vendeurs.length) {
+            if (errors.length > 0) {
+              return res.status(500).json({ error: errors.join(', ') });
+            }
+
+            const maintenant = getAdjustedDate();
+            db.run(
+              'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+              [
+                maintenant.toLocaleDateString('fr-FR'),
+                maintenant.toLocaleTimeString('fr-FR'),
+                `Démarrage de la journée avec: ${vendeurs.join(', ')}`,
+                'Système'
+              ],
+              (err) => {
+                if (err) {
+                  console.error('Erreur historique:', err);
+                  // Pas critique, on répond quand même
+                }
+                
+                console.log(`✅ Journée démarrée avec ${vendeurs.length} vendeurs`);
+                res.json({ success: true, message: 'Journée démarrée' });
+              }
+            );
+          }
+        });
       });
-      stmt.finalize();
-
-      // Ajouter à l'historique
-      const maintenant = getAdjustedDate();
-      db.run(
-        'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
-        [
-          maintenant.toLocaleDateString('fr-FR'),
-          maintenant.toLocaleTimeString('fr-FR'),
-          `Démarrage de la journée avec: ${vendeurs.join(', ')}`,
-          'Système'
-        ]
-      );
-
-      res.json({ success: true, message: 'Journée démarrée' });
     });
   });
 });
@@ -332,6 +353,64 @@ app.post('/api/enregistrer-vente', (req, res) => {
   );
 });
 
+// POST /api/enregistrer-vente-directe - Enregistrer une vente sans client
+app.post('/api/enregistrer-vente-directe', (req, res) => {
+  const { vendeur } = req.body;
+
+  if (!vendeur) {
+    return res.status(400).json({ error: 'Vendeur non spécifié' });
+  }
+
+  db.get(
+    'SELECT * FROM vendeurs WHERE nom = ?',
+    [vendeur],
+    (err, vendeurData) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!vendeurData) {
+        return res.status(404).json({ error: 'Vendeur non trouvé' });
+      }
+
+      const maintenant = getAdjustedDate();
+
+      db.serialize(() => {
+        // Incrémenter les ventes
+        db.run(
+          'UPDATE vendeurs SET ventes = ventes + 1 WHERE nom = ?',
+          [vendeur],
+          (err) => {
+            if (err) {
+              console.error('Erreur update ventes:', err);
+              return res.status(500).json({ error: err.message });
+            }
+
+            // Ajouter à l'historique
+            db.run(
+              'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+              [
+                maintenant.toLocaleDateString('fr-FR'),
+                maintenant.toLocaleTimeString('fr-FR'),
+                `Vente directe enregistrée par ${vendeur}`,
+                vendeur
+              ],
+              (err) => {
+                if (err) {
+                  console.error('Erreur historique:', err);
+                  // Pas critique
+                }
+                
+                res.json({ success: true, message: 'Vente directe enregistrée' });
+              }
+            );
+          }
+        );
+      });
+    }
+  );
+});
+
 // POST /api/terminer-journee - Terminer la journée
 // POST /api/terminer-journee - Terminer et clôturer la journée
 app.post('/api/terminer-journee', (req, res) => {
@@ -393,7 +472,6 @@ app.post('/api/terminer-journee', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
 
-            console.log('✅ Journée clôturée - Vendeurs et historique supprimés');
             res.json({ 
               success: true, 
               message: 'Journée clôturée avec succès',
@@ -408,13 +486,37 @@ app.post('/api/terminer-journee', (req, res) => {
 
 // POST /api/reinitialiser - Réinitialiser tout
 app.post('/api/reinitialiser', (req, res) => {
-  db.serialize(() => {
-    db.run('DELETE FROM vendeurs');
-    db.run('DELETE FROM historique');
-    db.run('DELETE FROM config');
-
-    res.json({ success: true, message: 'Réinitialisation complète' });
+  // Utiliser des Promises pour attendre la fin de chaque opération
+  const deleteVendeurs = new Promise((resolve, reject) => {
+    db.run('DELETE FROM vendeurs', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
   });
+
+  const deleteHistorique = new Promise((resolve, reject) => {
+    db.run('DELETE FROM historique', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  const deleteConfig = new Promise((resolve, reject) => {
+    db.run('DELETE FROM config', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  // Attendre que TOUT soit terminé avant de répondre
+  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig])
+    .then(() => {
+      res.json({ success: true, message: 'Réinitialisation complète' });
+    })
+    .catch((err) => {
+      console.error('❌ Erreur réinitialisation:', err);
+      res.status(500).json({ error: err.message });
+    });
 });
 
 // POST /api/ajouter-vendeur - Ajouter un vendeur en cours de journée
@@ -525,22 +627,35 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Démarrer le serveur
-const PORT = process.env.PORT || 8082;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 Serveur REST démarré !');
-  console.log(`🌐 API: http://localhost:${PORT}`);
-  console.log(`📊 Stats: http://localhost:${PORT}/api/stats`);
-  console.log(`💾 Base de données: ${dbPath}`);
-});
-
-// Gérer la fermeture propre
-process.on('SIGINT', () => {
-  db.close((err) => {
-    if (err) {
-      console.error(err.message);
-    }
-    console.log('Base de données fermée');
-    process.exit(0);
+// Démarrer le serveur SEULEMENT si ce n'est pas un import (pour les tests)
+if (require.main === module) {
+  const PORT = process.env.PORT || 8082;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('🚀 Serveur REST démarré !');
+    console.log(`🌐 API: http://localhost:${PORT}`);
+    console.log(`📊 Stats: http://localhost:${PORT}/api/stats`);
+    console.log(`💾 Base de données: ${dbPath}`);
   });
-});
+
+  // Gérer la fermeture propre
+  process.on('SIGINT', () => {
+    db.close((err) => {
+      if (err) {
+        console.error(err.message);
+      }
+      process.exit(0);
+    });
+  });
+}
+
+// 📋 DEBUG : Lister tous les endpoints
+if (process.env.NODE_ENV === 'test') {
+  app._router.stack.forEach((r) => {
+    if (r.route && r.route.path) {
+      console.log(`  ${Object.keys(r.route.methods)[0].toUpperCase()} ${r.route.path}`);
+    }
+  });
+}
+
+// ✅ EXPORTER pour les tests
+module.exports = { app, db, initDatabase };

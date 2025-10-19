@@ -5,8 +5,13 @@
   "main": "serveur-rest.js",
   "scripts": {
     "start": "node serveur-rest.js",
-    "dev": "nodemon serveur-rest.js",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "cross-env NODE_ENV=test jest",
+    "test:unit": "cross-env NODE_ENV=test jest tests/unit",
+    "test:integration": "cross-env NODE_ENV=test jest tests/integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -14,7 +19,11 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "@playwright/test": "^1.56.1",
+    "cross-env": "^10.1.0",
+    "jest": "^30.2.0",
+    "nodemon": "^3.0.2",
+    "supertest": "^7.1.4"
   },
   "keywords": [
     "rest",

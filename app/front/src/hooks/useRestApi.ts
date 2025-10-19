@@ -100,37 +100,40 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
 
   // Fonction générique pour faire des requêtes POST
   const postRequest = useCallback(async (endpoint: string, payload: any = {}) => {
-    setIsLoading(true);
-    
-    try {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+  setIsLoading(true);
+  
+  try {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      // Rafraîchir l'état après une mutation
-      await fetchState();
-      
-      return data;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      setError(error);
-      onError?.(error);
-      throw error;
-    } finally {
-      setIsLoading(false);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
-  }, [baseUrl, fetchState, onError]);
+
+    const data = await response.json();
+    
+    // ✅ ATTENDRE un peu avant de rafraîchir pour laisser le serveur terminer
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Rafraîchir l'état après une mutation
+    await fetchState();
+    
+    return data;
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error('Unknown error');
+    setError(error);
+    onError?.(error);
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+}, [baseUrl, fetchState, onError]);
 
   // Actions métier
   const actions = {
