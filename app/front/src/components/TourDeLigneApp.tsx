@@ -25,51 +25,23 @@ const TourDeLigneApp: React.FC = () => {
   // Hook REST API avec polling
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
     baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
-    pollingInterval: 10000,
+    pollingInterval: 100000,
     onStateUpdate: (serverState) => {
   console.log('🔥 État serveur reçu:', serverState);
   
-  // Mettre à jour UNIQUEMENT si le serveur a des vendeurs (journée démarrée côté serveur)
+  // ⚠️ NE PAS réactiver journeeActive si on vient de terminer
+  // Vérifier si tous les vendeurs ont 0 ventes = journée vient d'être terminée
   if (serverState.vendeurs && serverState.vendeurs.length > 0) {
-    const vendeurNames = serverState.vendeurs.map(v => v.nom);
-    
-    // Vérifier si tous les vendeurs ont 0 ventes = journée terminée
     const tousAZero = serverState.vendeurs.every(v => v.ventes === 0 && !v.clientEnCours);
     
+    // Si tous à zéro et journée était active, on ne fait rien (clôture en cours)
     if (tousAZero && journeeActive) {
-      // La journée vient d'être terminée côté serveur
-      // On ne change rien, la fonction terminerJournee() gère déjà ça
+      console.log('⚠️ Journée terminée détectée - pas de réactivation');
       return;
     }
-
-    const terminerJournee = async (): Promise<void> => {
-  console.log('🔴 DEBUT terminerJournee - journeeActive:', journeeActive);
-  
-  const confirmation = window.confirm(/* ... */);
-  if (!confirmation) return;
-
-  try {
-    const result = await actions.terminerJournee();
-    console.log('🔴 Résultat terminerJournee:', result);
     
-    if (result.success && result.exportData) {
-      // ... export ...
-      
-      console.log('🔴 AVANT setJourneeActive(false)');
-      setJourneeActive(false);
-      console.log('🔴 APRES setJourneeActive(false)');
-      
-      setOrdre([]);
-      setOrdreInitial([]);
-      setVendeursData({});
-      
-      console.log('🔴 États réinitialisés');
-    }
-  } catch (err) {
-    console.error('🔴 ERREUR:', err);
-  }
-};
-    
+    // Sinon continuer normalement
+    const vendeurNames = serverState.vendeurs.map(v => v.nom);
     setVendeurs(vendeurNames);
     setJourneeActive(true);
     
