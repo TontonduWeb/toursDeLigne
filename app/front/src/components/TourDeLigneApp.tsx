@@ -27,56 +27,66 @@ const TourDeLigneApp: React.FC = () => {
     baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
     pollingInterval: 10000,
     onStateUpdate: (serverState) => {
-      console.log('🔥 État serveur reçu:', serverState);
-      
-      // Mettre à jour UNIQUEMENT si le serveur a des vendeurs (journée démarrée côté serveur)
-      if (serverState.vendeurs && serverState.vendeurs.length > 0) {
-        const vendeurNames = serverState.vendeurs.map(v => v.nom);
-        setVendeurs(vendeurNames);
-        setJourneeActive(true);
-        
-        // Convertir en format local
-        const vendeursDataLocal: Record<string, VendeurData> = {};
-        serverState.vendeurs.forEach(v => {
-          vendeursDataLocal[v.nom] = {
-            nom: v.nom,
-            compteurVentes: v.ventes,
-            clientEnCours: v.clientEnCours || undefined
-          };
-        });
-        setVendeursData(vendeursDataLocal);
-        
-        // Mettre à jour l'ordre
-        const nouveauOrdre = trierOrdreVendeurs(
-          vendeurNames,
-          vendeurNames,
-          vendeursDataLocal
-        );
-        
-        setOrdre(nouveauOrdre);
-        setOrdreInitial(vendeurNames);
-      }
-      
-      // Mettre à jour l'historique (toujours, même sans vendeurs)
-      if (serverState.historique) {
-        const historiqueLocal: HistoriqueItem[] = serverState.historique.map(h => ({
-          action: h.action.includes('Vente') ? 'vente' :
-                 h.action.includes('Client pris') ? 'prise_client' :
-                 h.action.includes('Client abandonné') ? 'abandon_client' :
-                 h.action.includes('Démarrage') ? 'demarrage' :
-                 h.action.includes('terminée') ? 'fin' : 'autre',
-          vendeur: h.vendeur,
-          clientId: h.clientId,
-          date: h.date,
-          heure: h.heure,
-          message: h.action
-        }));
-        setHistorique(historiqueLocal);
-      }
-    },
-    onError: (err) => {
-      console.error('❌ Erreur API:', err);
+  console.log('🔥 État serveur reçu:', serverState);
+  
+  // Mettre à jour UNIQUEMENT si le serveur a des vendeurs (journée démarrée côté serveur)
+  if (serverState.vendeurs && serverState.vendeurs.length > 0) {
+    const vendeurNames = serverState.vendeurs.map(v => v.nom);
+    
+    // Vérifier si tous les vendeurs ont 0 ventes = journée terminée
+    const tousAZero = serverState.vendeurs.every(v => v.ventes === 0 && !v.clientEnCours);
+    
+    if (tousAZero && journeeActive) {
+      // La journée vient d'être terminée côté serveur
+      // On ne change rien, la fonction terminerJournee() gère déjà ça
+      return;
     }
+    
+    setVendeurs(vendeurNames);
+    setJourneeActive(true);
+    
+    // Convertir en format local
+    const vendeursDataLocal: Record<string, VendeurData> = {};
+    serverState.vendeurs.forEach(v => {
+      vendeursDataLocal[v.nom] = {
+        nom: v.nom,
+        compteurVentes: v.ventes,
+        clientEnCours: v.clientEnCours || undefined
+      };
+    });
+    setVendeursData(vendeursDataLocal);
+    
+    // Mettre à jour l'ordre
+    const nouveauOrdre = trierOrdreVendeurs(
+      vendeurNames,
+      vendeurNames,
+      vendeursDataLocal
+    );
+    
+    setOrdre(nouveauOrdre);
+    setOrdreInitial(vendeurNames);
+  } else if (!journeeActive) {
+    // Pas de vendeurs côté serveur ET journée non active = OK
+    // Ne rien faire
+  }
+  
+  // Mettre à jour l'historique (toujours, même sans vendeurs)
+  if (serverState.historique) {
+    const historiqueLocal: HistoriqueItem[] = serverState.historique.map(h => ({
+      action: h.action.includes('Vente') ? 'vente' :
+             h.action.includes('Client pris') ? 'prise_client' :
+             h.action.includes('Client abandonné') ? 'abandon_client' :
+             h.action.includes('Démarrage') ? 'demarrage' :
+             h.action.includes('terminée') ? 'fin' : 'autre',
+      vendeur: h.vendeur,
+      clientId: h.clientId,
+      date: h.date,
+      heure: h.heure,
+      message: h.action
+    }));
+    setHistorique(historiqueLocal);
+  }
+}
   });
 
   // Recalculer l'ordre quand vendeursData change
@@ -136,7 +146,7 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
-    const terminerJournee = async (): Promise<void> => {
+const terminerJournee = async (): Promise<void> => {
   const confirmation = window.confirm(
     '⚠️ ATTENTION - Action irréversible\n\n' +
     'Êtes-vous sûr de vouloir CLÔTURER la journée ?\n\n' +
@@ -170,13 +180,22 @@ const TourDeLigneApp: React.FC = () => {
       setRecapitulatifJournee(result.exportData);
       setAfficherRecapitulatif(true);
       
+      // NOUVEAU : Réinitialiser l'état de l'application
+      setJourneeActive(false);
+      setOrdre([]);
+      setOrdreInitial([]);
+      setVendeursData({});
+      // Garder la liste des vendeurs pour pouvoir redémarrer facilement
+      // setVendeurs([]);  // Décommente si tu veux aussi vider la liste
+      
       // Message de succès
       alert(
         '✅ Journée clôturée avec succès !\n\n' +
         `📊 Total des ventes : ${result.exportData.statistiques.totalVentes}\n` +
         `👥 Nombre de vendeurs : ${result.exportData.statistiques.totalVendeurs}\n` +
         `📈 Moyenne par vendeur : ${result.exportData.statistiques.moyenneVentes}\n\n` +
-        '💾 L\'export a été téléchargé automatiquement.'
+        '💾 L\'export a été téléchargé automatiquement.\n\n' +
+        '🔄 Vous pouvez maintenant redémarrer une nouvelle journée.'
       );
     }
   } catch (err) {
