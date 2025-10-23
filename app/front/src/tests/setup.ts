@@ -1,12 +1,21 @@
 import '@testing-library/jest-dom';
 
-// Mock de localStorage
+// Mock de localStorage avec stockage en mémoire
+const storage: Record<string, string> = {};
+
 const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
+  getItem: jest.fn((key: string) => storage[key] || null),
+  setItem: jest.fn((key: string, value: string) => {
+    storage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete storage[key];
+  }),
+  clear: jest.fn(() => {
+    Object.keys(storage).forEach(key => delete storage[key]);
+  }),
 };
+
 global.localStorage = localStorageMock as any;
 
 // Mock de fetch pour les appels API
@@ -32,9 +41,13 @@ afterAll(() => {
   console.error = originalError;
 });
 
-// Reset des mocks après chaque test
+// Reset des mocks et du localStorage après chaque test
 afterEach(() => {
   jest.clearAllMocks();
+  
+  // Vider complètement le localStorage
+  Object.keys(storage).forEach(key => delete storage[key]);
+  
   localStorageMock.getItem.mockClear();
   localStorageMock.setItem.mockClear();
   localStorageMock.removeItem.mockClear();

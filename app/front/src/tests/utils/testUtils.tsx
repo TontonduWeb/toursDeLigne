@@ -4,6 +4,15 @@ import { VendeurData, HistoriqueItem } from '../../types';
 
 // ==================== MOCKS D'API ====================
 
+// État initial : aucun vendeur (phase de configuration)
+export const mockServerStateVide = {
+  ordreActuel: {
+    prochainVendeur: null,
+  },
+  vendeurs: [],
+  historique: [],
+};
+
 export const mockServerState = {
   ordreActuel: {
     prochainVendeur: 'Alice',
@@ -90,7 +99,7 @@ export const mockServerStateApresVente = {
 
 // ==================== MOCK DE FETCH ====================
 
-export const setupFetchMock = (responses: any[] = [mockServerState]) => {
+export const setupFetchMock = (responses: any[] = [mockServerStateVide]) => {
   let callCount = 0;
   
   (global.fetch as jest.Mock).mockImplementation((url: string, options?: any) => {
