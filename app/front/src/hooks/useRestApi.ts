@@ -78,9 +78,14 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
       }
       
       const data: ServerState = await response.json();
-      
+
       if (isMountedRef.current) {
-        setState(data);
+        setState(prevState => {
+          // Force une nouvelle référence si les données ont changé
+          const hasChanged = JSON.stringify(prevState) !== JSON.stringify(data);
+          console.log('📡 Server state changed:', hasChanged);
+          return hasChanged ? { ...data } : prevState;
+        });
         setIsOnline(true);
         setError(null);
         onStateUpdate?.(data);

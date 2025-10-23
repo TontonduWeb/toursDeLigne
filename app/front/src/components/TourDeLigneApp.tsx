@@ -25,7 +25,7 @@ const TourDeLigneApp: React.FC = () => {
   // Hook REST API avec polling
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
     baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
-    pollingInterval: 100000,
+    pollingInterval: 3000,
     onStateUpdate: (serverState) => {
   console.log('🔥 État serveur reçu:', serverState);
   
@@ -52,7 +52,12 @@ const TourDeLigneApp: React.FC = () => {
       console.log(`Vendeur ${v.nom}:`, v.ventes, 'ventes, client:', !!v.clientEnCours);
     });
     
-    setVendeursData(vendeursDataLocal);
+    setVendeursData(prev => {
+      // Force React à détecter le changement en comparant le contenu
+      const hasChanged = JSON.stringify(prev) !== JSON.stringify(vendeursDataLocal);
+      console.log('🔄 VendeursData changed:', hasChanged);
+      return hasChanged ? { ...vendeursDataLocal } : prev;
+    });
     
     // Mettre à jour l'ordre
     const nouveauOrdre = trierOrdreVendeurs(
@@ -92,10 +97,11 @@ const TourDeLigneApp: React.FC = () => {
     if (journeeActive && ordreInitial.length > 0) {
       const nouvelOrdre = trierOrdreVendeurs(ordreInitial, ordre, vendeursData);
       if (JSON.stringify(nouvelOrdre) !== JSON.stringify(ordre)) {
+        console.log('🔄 Ordre mis à jour:', nouvelOrdre);
         setOrdre(nouvelOrdre);
       }
     }
-  }, [vendeursData, journeeActive, ordreInitial]);
+  }, [vendeursData, journeeActive, ordreInitial, ordre]);
 
   // ==================== ACTIONS ====================
 
