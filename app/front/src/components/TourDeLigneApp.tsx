@@ -30,34 +30,27 @@ const TourDeLigneApp: React.FC = () => {
   console.log('🔥 État serveur reçu:', serverState);
   
   if (serverState.vendeurs && serverState.vendeurs.length > 0) {
-    const tousAZero = serverState.vendeurs.every(v => v.ventes === 0 && !v.clientEnCours);
-    
-    if (tousAZero && journeeActive) {
-      console.log('⚠️ Journée terminée détectée - pas de réactivation');
-      return;
-    }
-    
     const vendeurNames = serverState.vendeurs.map(v => v.nom);
     setVendeurs(vendeurNames);
     setJourneeActive(true);
     
-    // ✅ Convertir en format local avec logs
+    // ✅ Créer un NOUVEL objet à chaque fois avec timestamp
     const vendeursDataLocal: Record<string, VendeurData> = {};
     serverState.vendeurs.forEach(v => {
       vendeursDataLocal[v.nom] = {
         nom: v.nom,
         compteurVentes: v.ventes,
-        clientEnCours: v.clientEnCours || undefined
+        clientEnCours: v.clientEnCours ? {
+          id: v.clientEnCours.id,
+          heureDebut: v.clientEnCours.heureDebut,
+          dateDebut: v.clientEnCours.dateDebut
+        } : undefined
       };
       console.log(`Vendeur ${v.nom}:`, v.ventes, 'ventes, client:', !!v.clientEnCours);
     });
     
-    setVendeursData(prev => {
-      // Force React à détecter le changement en comparant le contenu
-      const hasChanged = JSON.stringify(prev) !== JSON.stringify(vendeursDataLocal);
-      console.log('🔄 VendeursData changed:', hasChanged);
-      return hasChanged ? { ...vendeursDataLocal } : prev;
-    });
+    // ✅ TOUJOURS créer un nouvel objet (pas de comparaison)
+    setVendeursData({ ...vendeursDataLocal });
     
     // Mettre à jour l'ordre
     const nouveauOrdre = trierOrdreVendeurs(
@@ -68,12 +61,12 @@ const TourDeLigneApp: React.FC = () => {
     
     setOrdre(nouveauOrdre);
     setOrdreInitial(vendeurNames);
+    
   } else if (!journeeActive) {
-    // Pas de vendeurs côté serveur ET journée non active = OK
-    // Ne rien faire
+    // Pas de vendeurs et journée non active = OK
   }
   
-  // Mettre à jour l'historique (toujours, même sans vendeurs)
+  // ✅ Mettre à jour l'historique TOUJOURS (même sans vendeurs)
   if (serverState.historique) {
     const historiqueLocal: HistoriqueItem[] = serverState.historique.map(h => ({
       action: h.action.includes('Vente') ? 'vente' :
@@ -87,21 +80,10 @@ const TourDeLigneApp: React.FC = () => {
       heure: h.heure,
       message: h.action
     }));
-    setHistorique(historiqueLocal);
+    setHistorique([...historiqueLocal]); // ✅ Force nouveau tableau
   }
 }
   });
-
-  // Recalculer l'ordre quand vendeursData change
-  useEffect(() => {
-    if (journeeActive && ordreInitial.length > 0) {
-      const nouvelOrdre = trierOrdreVendeurs(ordreInitial, ordre, vendeursData);
-      if (JSON.stringify(nouvelOrdre) !== JSON.stringify(ordre)) {
-        console.log('🔄 Ordre mis à jour:', nouvelOrdre);
-        setOrdre(nouvelOrdre);
-      }
-    }
-  }, [vendeursData, journeeActive, ordreInitial, ordre]);
 
   // ==================== ACTIONS ====================
 
