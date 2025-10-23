@@ -37,8 +37,8 @@ module.exports = {
     '!src/reportWebVitals.ts',
   ],
   
-  // Seuils de couverture
-  coverageThresholds: {
+  // Seuils de couverture (CORRIGÉ: coverageThreshold au singulier)
+  coverageThreshold: {
     global: {
       branches: 50,
       functions: 50,
@@ -55,11 +55,4 @@ module.exports = {
   
   // Options pour les modules
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
-  
-  // Variables d'environnement pour les tests
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-    },
-  },
 };
