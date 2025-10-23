@@ -2,7 +2,11 @@
 export interface VendeurData {
   nom: string;
   compteurVentes: number;
-  clientEnCours?: ClientEnCours; // Nouveau: client actuellement pris en charge
+  clientEnCours?: {
+    id: string;
+    heureDebut: string;
+    dateDebut: string;
+  };
 }
 
 export interface ClientEnCours {
