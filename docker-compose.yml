@@ -1,0 +1,19 @@
+networks:
+  docker-services_internal:
+    external: true
+
+services:
+  tour-ligne-api:
+    build:
+      context: ./app/back
+    container_name: tour-ligne-api
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    networks:
+      - docker-services_internal
+    volumes:
+      - ./app/back/data:/app/data:rw
+    environment:
+      - NODE_ENV=production
+      - PORT=8082
