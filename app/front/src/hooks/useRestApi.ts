@@ -48,16 +48,12 @@ interface ServerState {
 interface UseRestApiOptions {
   baseUrl?: string;
   pollingInterval?: number;
-  onStateUpdate?: (state: ServerState) => void;
-  onError?: (error: Error) => void;
 }
 
 export const useRestApi = (options: UseRestApiOptions = {}) => {
   const {
     baseUrl = 'http://192.168.1.27:8082',
     pollingInterval = 3000,
-    onStateUpdate,
-    onError
   } = options;
 
   const [state, setState] = useState<ServerState | null>(null);
@@ -68,40 +64,26 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
   const pollingIntervalRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
 
-  // Fonction pour récupérer l'état du serveur
   const fetchState = useCallback(async () => {
-    try {
-      const response = await fetch(`${baseUrl}/api/state`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data: ServerState = await response.json();
+  try {
+    const response = await fetch(`${baseUrl}/api/state`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const data: ServerState = await response.json();
 
-      if (isMountedRef.current) {
-        setState(prevState => {
-          // Force une nouvelle référence si les données ont changé
-          const hasChanged = JSON.stringify(prevState) !== JSON.stringify(data);
-          console.log('📡 Server state changed:', hasChanged);
-          return hasChanged ? { ...data } : prevState;
-        });
-        setIsOnline(true);
-        setError(null);
-        onStateUpdate?.(data);
-      }
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      
-      if (isMountedRef.current) {
-        setError(error);
-        setIsOnline(false);
-        onError?.(error);
-      }
-      
-      console.error('Erreur fetch state:', error);
+    if (isMountedRef.current) {
+      setState(data);  // ← Juste ça, plus de callback
+      setIsOnline(true);
+      setError(null);
     }
-  }, [baseUrl, onStateUpdate, onError]);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error('Unknown error');
+    if (isMountedRef.current) {
+      setError(error);
+      setIsOnline(false);
+    }
+  }
+}, [baseUrl]);
 
   // Fonction générique pour faire des requêtes POST
   const postRequest = useCallback(async (endpoint: string, payload: any = {}) => {
@@ -133,12 +115,11 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
   } catch (err) {
     const error = err instanceof Error ? err : new Error('Unknown error');
     setError(error);
-    onError?.(error);
     throw error;
   } finally {
     setIsLoading(false);
   }
-}, [baseUrl, fetchState, onError]);
+}, [baseUrl, fetchState]);
 
   // Actions métier
   const actions = {

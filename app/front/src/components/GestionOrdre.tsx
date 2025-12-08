@@ -1,12 +1,6 @@
 // src/components/GestionOrdre.tsx
 import React from 'react';
 import { VendeurData } from '../types';
-import { 
-  getNombreMinimumVentes, 
-  getVendeursDisponibles, 
-  getVendeursOccupes,
-  calculerStatistiquesVendeurs 
-} from '../services/vendeurService';
 
 interface GestionOrdreProps {
   ordre: string[];
@@ -21,12 +15,27 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   vendeursData,
   onTerminerJournee
 }) => {
-  // Statistiques et données calculées
-  const minVentes = getNombreMinimumVentes(vendeursData);
-  const vendeursDisponibles = getVendeursDisponibles(ordre, vendeursData);
-  const stats = calculerStatistiquesVendeurs(vendeursData);
+  // ========== CALCULS LOCAUX (remplace vendeurService) ==========
   
-  const prochainVendeurDisponible = vendeursDisponibles[0];
+  const vendeursList = Object.values(vendeursData);
+  
+  // Statistiques
+  const totalVendeurs = vendeursList.length;
+  const vendeursOccupes = vendeursList.filter(v => v.clientEnCours).length;
+  const vendeursDisponibles = totalVendeurs - vendeursOccupes;
+  const totalVentes = vendeursList.reduce((sum, v) => sum + v.compteurVentes, 0);
+  const moyenneVentes = totalVendeurs > 0 ? (totalVentes / totalVendeurs).toFixed(1) : '0';
+  
+  // Minimum de ventes parmi les disponibles
+  const disponibles = vendeursList.filter(v => !v.clientEnCours);
+  const minVentes = disponibles.length > 0 
+    ? Math.min(...disponibles.map(v => v.compteurVentes)) 
+    : 0;
+  
+  // Prochain vendeur disponible
+  const prochainVendeurDisponible = ordre.find(nom => !vendeursData[nom]?.clientEnCours) ?? null;
+
+  // Le reste du composant reste identique...
 
   return (
     <div className="mb-8 p-4 bg-green-50 rounded-lg">
@@ -43,19 +52,19 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
       {/* Statistiques générales */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-3 rounded border text-center">
-          <div className="text-2xl font-bold text-blue-600">{stats.totalVendeurs}</div>
+          <div className="text-2xl font-bold text-blue-600">{totalVendeurs}</div>
           <div className="text-sm text-gray-600">Vendeurs total</div>
         </div>
         <div className="bg-white p-3 rounded border text-center">
-          <div className="text-2xl font-bold text-green-600">{stats.vendeursDisponibles}</div>
+          <div className="text-2xl font-bold text-green-600">{vendeursDisponibles}</div>
           <div className="text-sm text-gray-600">Disponibles</div>
         </div>
         <div className="bg-white p-3 rounded border text-center">
-          <div className="text-2xl font-bold text-orange-600">{stats.vendeursOccupes}</div>
+          <div className="text-2xl font-bold text-orange-600">{vendeursOccupes}</div>
           <div className="text-sm text-gray-600">Avec clients</div>
         </div>
         <div className="bg-white p-3 rounded border text-center">
-          <div className="text-2xl font-bold text-purple-600">{stats.totalVentes}</div>
+          <div className="text-2xl font-bold text-purple-600">{totalVentes}</div>
           <div className="text-sm text-gray-600">Ventes totales</div>
         </div>
       </div>
@@ -154,9 +163,9 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
             <div className="p-3 bg-gray-50 rounded border">
               <h4 className="text-sm font-semibold mb-2">Répartition actuelle :</h4>
               <div className="text-xs space-y-1">
-                <div>📊 Moyenne de ventes: {stats.moyenneVentes}</div>
+                <div>📊 Moyenne de ventes: {moyenneVentes}</div>
                 <div>🎯 Objectif d'équilibrage: {minVentes} ventes minimum</div>
-                <div>⏱️ Vendeurs en cours: {stats.vendeursOccupes}/{stats.totalVendeurs}</div>
+                <div>⏱️ Vendeurs en cours: {vendeursOccupes}/{totalVendeurs}</div>
               </div>
             </div>
           </div>

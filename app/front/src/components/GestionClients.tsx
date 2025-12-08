@@ -1,7 +1,6 @@
 // src/components/GestionClients.tsx
 import React from 'react';
 import { VendeurData } from '../types';
-import { getNombreMinimumVentes } from '../services/vendeurService';
 
 interface GestionClientsProps {
   ordre: string[];
@@ -16,13 +15,22 @@ const GestionClients: React.FC<GestionClientsProps> = ({
   onPrendreClient,
   onAbandonnerClient
 }) => {
-  const minVentes = getNombreMinimumVentes(vendeursData);
+  // ========== CALCULS LOCAUX ==========
   
-  // Trouver les vendeurs disponibles (sans client en cours)
-  const vendeursDisponibles = ordre.filter(vendeur => !vendeursData[vendeur]?.clientEnCours);
-  const vendeursOccupes = ordre.filter(vendeur => vendeursData[vendeur]?.clientEnCours);
-
-  const prochainVendeur = vendeursDisponibles[0];
+  // Vendeurs disponibles (sans client)
+  const vendeursDisponibles = ordre.filter(nom => !vendeursData[nom]?.clientEnCours);
+  
+  // Vendeurs occupés (avec client)
+  const vendeursOccupes = ordre.filter(nom => vendeursData[nom]?.clientEnCours);
+  
+  // Prochain vendeur disponible
+  const prochainVendeur = vendeursDisponibles[0] ?? null;
+  
+  // Minimum de ventes parmi les disponibles
+  const disponiblesData = vendeursDisponibles.map(nom => vendeursData[nom]).filter(Boolean);
+  const minVentes = disponiblesData.length > 0 
+    ? Math.min(...disponiblesData.map(v => v.compteurVentes)) 
+    : 0;
 
   return (
     <div className="mb-8 p-4 bg-blue-50 rounded-lg">
@@ -47,7 +55,7 @@ const GestionClients: React.FC<GestionClientsProps> = ({
         <div className="mb-6">
           <h3 className="font-semibold mb-3 text-orange-700">Vendeurs avec clients en cours</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {vendeursOccupes.map((vendeur) => {
+            {vendeursOccupes.map((vendeur: string) => {
               const vendeurData = vendeursData[vendeur];
               const client = vendeurData?.clientEnCours;
               const nbVentes = vendeurData?.compteurVentes || 0;
@@ -92,7 +100,7 @@ const GestionClients: React.FC<GestionClientsProps> = ({
         <div>
           <h3 className="font-semibold mb-3">Vendeurs en attente</h3>
           <div className="flex flex-wrap gap-2">
-            {vendeursDisponibles.slice(1).map((vendeur, index) => {
+            {vendeursDisponibles.slice(1).map((vendeur: string, index: number) => {
               const nbVentes = vendeursData[vendeur]?.compteurVentes || 0;
               const estMinimum = nbVentes === minVentes;
               
@@ -125,25 +133,21 @@ const GestionClients: React.FC<GestionClientsProps> = ({
   );
 };
 
-// Fonction utilitaire pour calculer la durée - VERSION CORRIGÉE
+// Fonction utilitaire pour calculer la durée
 function calculerDuree(dateDebut: string, heureDebut: string): string {
   try {
-    // Parsing robuste de la date et heure
-    // Format attendu: dateDebut = "15/10/2025", heureDebut = "14:30:25"
     const [jour, mois, annee] = dateDebut.split('/');
     const [heures, minutes, secondes] = heureDebut.split(':');
     
-    // Créer la date de début avec le format ISO
     const debut = new Date(
       parseInt(annee),
-      parseInt(mois) - 1, // Les mois commencent à 0
+      parseInt(mois) - 1,
       parseInt(jour),
       parseInt(heures),
       parseInt(minutes),
       parseInt(secondes || '0')
     );
     
-    // Vérifier que la date est valide
     if (isNaN(debut.getTime())) {
       console.error('Date invalide:', { dateDebut, heureDebut });
       return "Erreur";

@@ -9,6 +9,30 @@ export interface VendeurData {
   };
 }
 
+export interface ServerVendeur {
+  nom: string;
+  ventes: number;
+  clientEnCours: {
+    id: string;
+    heureDebut: string;
+    dateDebut: string;
+  } | null;
+}
+
+export interface ServerState {
+  ordreActuel: {
+    prochainVendeur: string | null;
+  };
+  vendeurs: ServerVendeur[];
+  historique: {
+    date: string;
+    heure: string;
+    action: string;
+    vendeur?: string;
+    clientId?: string;
+  }[];
+}
+
 export interface ClientEnCours {
   id: string;
   heureDebut: string;

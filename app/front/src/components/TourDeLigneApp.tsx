@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useRestApi } from '../hooks/useRestApi';
-import { HistoriqueItem, VendeurData } from '../types';
+import { VendeurData } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
 import AjoutVendeurJournee from './AjoutVendeurJournee';
 import GestionOrdre from './GestionOrdre';
@@ -8,192 +8,157 @@ import GestionClients from './GestionClients';
 import EnregistrementVentes from './EnregistrementVentes';
 import HistoriqueVentes from './HistoriqueVentes';
 import ActionButtons from './ActionButtons';
-import { trierOrdreVendeurs } from '../services/vendeurService';
 import RecapitulatifJournee from './RecapitulatifJournee';
 
 const TourDeLigneApp: React.FC = () => {
-  // États synchronisés avec le serveur (plus de localStorage)
-  const [vendeurs, setVendeurs] = useState<string[]>([]);
-  const [journeeActive, setJourneeActive] = useState<boolean>(false);
-  const [ordreInitial, setOrdreInitial] = useState<string[]>([]);
-  const [ordre, setOrdre] = useState<string[]>([]);
-  const [historique, setHistorique] = useState<HistoriqueItem[]>([]);
-  const [vendeursData, setVendeursData] = useState<Record<string, VendeurData>>({});
+  // ========== ÉTATS LOCAUX (uniquement ce qui n'est PAS sur le serveur) ==========
+  
+  // Configuration avant démarrage (pas encore envoyée au serveur)
+  const [vendeursConfig, setVendeursConfig] = useState<string[]>([]);
+  
+  // Récapitulatif après clôture
   const [recapitulatifJournee, setRecapitulatifJournee] = useState<any>(null);
   const [afficherRecapitulatif, setAfficherRecapitulatif] = useState<boolean>(false);
 
-  // Hook REST API avec polling
+  // ========== HOOK REST API (source unique de vérité) ==========
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
     baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
     pollingInterval: 3000,
-    onStateUpdate: (serverState) => {
-  console.log('🔥 État serveur reçu:', serverState);
-  
-  if (serverState.vendeurs && serverState.vendeurs.length > 0) {
-    const vendeurNames = serverState.vendeurs.map(v => v.nom);
-    setVendeurs(vendeurNames);
-    setJourneeActive(true);
-    
-    // ✅ Créer un NOUVEL objet à chaque fois avec timestamp
-    const vendeursDataLocal: Record<string, VendeurData> = {};
-    serverState.vendeurs.forEach(v => {
-      vendeursDataLocal[v.nom] = {
-        nom: v.nom,
-        compteurVentes: v.ventes,
-        clientEnCours: v.clientEnCours ? {
-          id: v.clientEnCours.id,
-          heureDebut: v.clientEnCours.heureDebut,
-          dateDebut: v.clientEnCours.dateDebut
-        } : undefined
-      };
-      console.log(`Vendeur ${v.nom}:`, v.ventes, 'ventes, client:', !!v.clientEnCours);
-    });
-    
-    // ✅ TOUJOURS créer un nouvel objet (pas de comparaison)
-    setVendeursData({ ...vendeursDataLocal });
-    
-    // Mettre à jour l'ordre
-    const nouveauOrdre = trierOrdreVendeurs(
-      vendeurNames,
-      vendeurNames,
-      vendeursDataLocal
-    );
-    
-    setOrdre(nouveauOrdre);
-    setOrdreInitial(vendeurNames);
-    
-  } else if (!journeeActive) {
-    // Pas de vendeurs et journée non active = OK
-  }
-  
-  // ✅ Mettre à jour l'historique TOUJOURS (même sans vendeurs)
-  if (serverState.historique) {
-    const historiqueLocal: HistoriqueItem[] = serverState.historique.map(h => ({
-      action: h.action.includes('Vente') ? 'vente' :
-             h.action.includes('Client pris') ? 'prise_client' :
-             h.action.includes('Client abandonné') ? 'abandon_client' :
-             h.action.includes('Démarrage') ? 'demarrage' :
-             h.action.includes('terminée') ? 'fin' : 'autre',
-      vendeur: h.vendeur,
-      clientId: h.clientId,
-      date: h.date,
-      heure: h.heure,
-      message: h.action
-    }));
-    setHistorique([...historiqueLocal]); // ✅ Force nouveau tableau
-  }
-}
+    // Plus de onStateUpdate ! Le state est utilisé directement
   });
 
-  // ==================== ACTIONS ====================
+  // ========== VALEURS DÉRIVÉES (calculées à partir de state) ==========
+  
+  // La journée est active si le serveur a des vendeurs
+  const journeeActive = (state?.vendeurs?.length ?? 0) > 0;
+  
+  // Liste des noms de vendeurs (pour compatibilité avec composants existants)
+  const vendeurs = state?.vendeurs?.map(v => v.nom) ?? [];
+  
+  // Historique brut du serveur
+  const historique = state?.historique ?? [];
+  
+  // Conversion vers l'ancien format vendeursData pour compatibilité
+  const vendeursData: Record<string, VendeurData> = {};
+  state?.vendeurs?.forEach(v => {
+    vendeursData[v.nom] = {
+      nom: v.nom,
+      compteurVentes: v.ventes,
+      clientEnCours: v.clientEnCours ? {
+        id: v.clientEnCours.id,
+        heureDebut: v.clientEnCours.heureDebut,
+        dateDebut: v.clientEnCours.dateDebut
+      } : undefined
+    };
+  });
 
-  const ajouterVendeur = (vendeur: string): void => {
-    if (!vendeurs.includes(vendeur)) {
-      setVendeurs([...vendeurs, vendeur]);
+  // Ordre = liste des noms (le serveur gère déjà l'ordre)
+  const ordre = vendeurs;
+  const ordreInitial = vendeurs;
+
+  // ========== ACTIONS DE CONFIGURATION (avant démarrage) ==========
+
+  const ajouterVendeurConfig = (vendeur: string): void => {
+    if (!vendeursConfig.includes(vendeur)) {
+      setVendeursConfig([...vendeursConfig, vendeur]);
     }
   };
 
-  const supprimerVendeur = (vendeur: string): void => {
-    setVendeurs(vendeurs.filter(v => v !== vendeur));
+  const supprimerVendeurConfig = (vendeur: string): void => {
+    setVendeursConfig(vendeursConfig.filter(v => v !== vendeur));
   };
 
-  // NOUVEAU : Monter un vendeur dans l'ordre
-  const monterVendeur = (index: number): void => {
+  const monterVendeurConfig = (index: number): void => {
     if (index > 0) {
-      const nouveauVendeurs = [...vendeurs];
+      const nouveauVendeurs = [...vendeursConfig];
       [nouveauVendeurs[index - 1], nouveauVendeurs[index]] = 
       [nouveauVendeurs[index], nouveauVendeurs[index - 1]];
-      setVendeurs(nouveauVendeurs);
+      setVendeursConfig(nouveauVendeurs);
     }
   };
 
-  // NOUVEAU : Descendre un vendeur dans l'ordre
-  const descendreVendeur = (index: number): void => {
-    if (index < vendeurs.length - 1) {
-      const nouveauVendeurs = [...vendeurs];
+  const descendreVendeurConfig = (index: number): void => {
+    if (index < vendeursConfig.length - 1) {
+      const nouveauVendeurs = [...vendeursConfig];
       [nouveauVendeurs[index], nouveauVendeurs[index + 1]] = 
       [nouveauVendeurs[index + 1], nouveauVendeurs[index]];
-      setVendeurs(nouveauVendeurs);
+      setVendeursConfig(nouveauVendeurs);
     }
   };
 
+  // ========== ACTIONS SERVEUR ==========
+
   const demarrerJournee = async (): Promise<void> => {
-    if (vendeurs.length === 0) {
+    if (vendeursConfig.length === 0) {
       alert("Veuillez ajouter au moins un vendeur avant de démarrer la journée.");
       return;
     }
 
     try {
-      await actions.demarrerJournee(vendeurs);
-      // L'état sera mis à jour automatiquement via le polling
+      await actions.demarrerJournee(vendeursConfig);
+      // Vider la config locale après envoi au serveur
+      setVendeursConfig([]);
     } catch (err) {
       alert('Erreur lors du démarrage de la journée');
       console.error(err);
     }
   };
 
-const terminerJournee = async (): Promise<void> => {
-  const confirmation = window.confirm(
-    '⚠️ ATTENTION - Action irréversible\n\n' +
-    'Êtes-vous sûr de vouloir CLÔTURER la journée ?\n\n' +
-    '✓ Un export automatique sera généré\n' +
-    '✓ Les compteurs seront remis à zéro\n' +
-    '✓ L\'ordre sera réinitialisé\n' +
-    '✓ L\'historique sera effacé\n' +
-    '✓ Vous ne pourrez plus enregistrer de ventes pour cette journée\n\n' +
-    'Pour continuer, cliquez sur OK.'
-  );
+  const terminerJournee = async (): Promise<void> => {
+    const confirmation = window.confirm(
+      '⚠️ ATTENTION - Action irréversible\n\n' +
+      'Êtes-vous sûr de vouloir CLÔTURER la journée ?\n\n' +
+      '✓ Un export automatique sera généré\n' +
+      '✓ Les compteurs seront remis à zéro\n' +
+      '✓ L\'ordre sera réinitialisé\n' +
+      '✓ L\'historique sera effacé\n' +
+      '✓ Vous ne pourrez plus enregistrer de ventes pour cette journée\n\n' +
+      'Pour continuer, cliquez sur OK.'
+    );
 
-  if (!confirmation) return;
+    if (!confirmation) return;
 
-  try {
-    const result = await actions.terminerJournee();
+    try {
+      const result = await actions.terminerJournee();
 
-    if (result.success && result.exportData) {
-      // Télécharger automatiquement l'export
-      const blob = new Blob([JSON.stringify(result.exportData, null, 2)], {
-        type: 'application/json'
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cloture-journee-${result.exportData.dateClôture.replace(/\//g, '-')}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (result.success && result.exportData) {
+        // Télécharger automatiquement l'export
+        const blob = new Blob([JSON.stringify(result.exportData, null, 2)], {
+          type: 'application/json'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cloture-journee-${result.exportData.dateClôture.replace(/\//g, '-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
-      // Afficher le récapitulatif
-      setRecapitulatifJournee(result.exportData);
-      setAfficherRecapitulatif(true);
+        // Afficher le récapitulatif
+        setRecapitulatifJournee(result.exportData);
+        setAfficherRecapitulatif(true);
 
-      // Réinitialiser l'état de l'application
-      setJourneeActive(false);
-      setOrdre([]);
-      setOrdreInitial([]);
-      setVendeursData({});
-      setVendeurs([]);  // ✅ Vider aussi la liste des vendeurs
-      setHistorique([]); // ✅ Vider l'historique local
-
-      // Message de succès
-      alert(
-        '✅ Journée clôturée avec succès !\n\n' +
-        `📊 Total des ventes : ${result.exportData.statistiques.totalVentes}\n` +
-        `👥 Nombre de vendeurs : ${result.exportData.statistiques.totalVendeurs}\n` +
-        `📈 Moyenne par vendeur : ${result.exportData.statistiques.moyenneVentes}\n\n` +
-        '💾 L\'export a été téléchargé automatiquement.\n' +
-        '🗑️ L\'historique a été effacé.\n\n' +
-        '🔄 Vous pouvez maintenant redémarrer une nouvelle journée.'
-      );
+        alert(
+          '✅ Journée clôturée avec succès !\n\n' +
+          `📊 Total des ventes : ${result.exportData.statistiques.totalVentes}\n` +
+          `👥 Nombre de vendeurs : ${result.exportData.statistiques.totalVendeurs}\n` +
+          `📈 Moyenne par vendeur : ${result.exportData.statistiques.moyenneVentes}\n\n` +
+          '💾 L\'export a été téléchargé automatiquement.\n' +
+          '🗑️ L\'historique a été effacé.\n\n' +
+          '🔄 Vous pouvez maintenant redémarrer une nouvelle journée.'
+        );
+      }
+    } catch (err) {
+      alert('❌ Erreur lors de la clôture de la journée');
+      console.error(err);
     }
-  } catch (err) {
-    alert('❌ Erreur lors de la clôture de la journée');
-    console.error(err);
-  }
-};
+  };
 
   const prendreClient = async (vendeur: string): Promise<void> => {
-    if (!journeeActive || !ordre.includes(vendeur) || vendeursData[vendeur]?.clientEnCours) {
+    const vendeurActuel = state?.vendeurs?.find(v => v.nom === vendeur);
+    
+    if (!journeeActive || !vendeurActuel || vendeurActuel.clientEnCours) {
       return;
     }
 
@@ -206,84 +171,73 @@ const terminerJournee = async (): Promise<void> => {
   };
 
   const abandonnerClient = async (vendeur: string): Promise<void> => {
-  // ✅ Vérifier l'état ACTUEL du vendeur avant d'agir
-  const vendeurActuel = vendeursData[vendeur];
-  
-  if (!journeeActive) {
-    console.warn('Journée non active');
-    return;
-  }
-  
-  if (!vendeurActuel) {
-    console.warn('Vendeur introuvable:', vendeur);
-    alert('Erreur: Vendeur introuvable');
-    return;
-  }
-  
-  if (!vendeurActuel.clientEnCours) {
-    console.warn('Aucun client en cours pour:', vendeur);
-    alert('Ce vendeur n\'a pas de client en cours');
-    return;
-  }
-
-  try {
-    console.log('Abandon client pour:', vendeur, vendeurActuel.clientEnCours);
-    await actions.abandonnerClient(vendeur);
+    const vendeurActuel = state?.vendeurs?.find(v => v.nom === vendeur);
     
-    // ✅ Forcer un refresh immédiat
-    await refresh();
-  } catch (err) {
-    console.error('Erreur abandon:', err);
-    alert(`Erreur lors de l'abandon du client: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-  }
-};
+    if (!journeeActive) {
+      console.warn('Journée non active');
+      return;
+    }
+    
+    if (!vendeurActuel) {
+      alert('Erreur: Vendeur introuvable');
+      return;
+    }
+    
+    if (!vendeurActuel.clientEnCours) {
+      alert('Ce vendeur n\'a pas de client en cours');
+      return;
+    }
+
+    try {
+      await actions.abandonnerClient(vendeur);
+      await refresh();
+    } catch (err) {
+      console.error('Erreur abandon:', err);
+      alert(`Erreur lors de l'abandon du client: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+    }
+  };
 
   const enregistrerVente = async (vendeur: string): Promise<void> => {
-  const vendeurActuel = vendeursData[vendeur];
-  
-  if (!journeeActive) {
-    console.warn('Journée non active');
-    return;
-  }
-  
-  if (!vendeurActuel) {
-    console.warn('Vendeur introuvable:', vendeur);
-    alert('Erreur: Vendeur introuvable');
-    return;
-  }
-  
-  if (!vendeurActuel.clientEnCours) {
-    console.warn('Aucun client en cours pour:', vendeur);
-    alert('Ce vendeur n\'a pas de client en cours');
-    return;
-  }
-
-  try {
-    console.log('Enregistrement vente pour:', vendeur, vendeurActuel.clientEnCours);
-    await actions.enregistrerVente(vendeur);
+    const vendeurActuel = state?.vendeurs?.find(v => v.nom === vendeur);
     
-    // ✅ Forcer un refresh immédiat
-    await refresh();
-  } catch (err) {
-    console.error('Erreur vente:', err);
-    alert(`Erreur lors de l'enregistrement de la vente: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-  }
-};
+    if (!journeeActive) {
+      console.warn('Journée non active');
+      return;
+    }
+    
+    if (!vendeurActuel) {
+      alert('Erreur: Vendeur introuvable');
+      return;
+    }
+    
+    if (!vendeurActuel.clientEnCours) {
+      alert('Ce vendeur n\'a pas de client en cours');
+      return;
+    }
+
+    try {
+      await actions.enregistrerVente(vendeur);
+      await refresh();
+    } catch (err) {
+      console.error('Erreur vente:', err);
+      alert(`Erreur lors de l'enregistrement de la vente: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+    }
+  };
+
   const ajouterVendeurEnCoursDeJournee = async (vendeur: string): Promise<void> => {
-  try {
-    await actions.ajouterVendeur(vendeur);
-    // L'état sera mis à jour automatiquement via le polling
-  } catch (err) {
-    alert('Erreur lors de l\'ajout du vendeur');
-    console.error(err);
-  }
-};
+    try {
+      await actions.ajouterVendeur(vendeur);
+    } catch (err) {
+      alert('Erreur lors de l\'ajout du vendeur');
+      console.error(err);
+    }
+  };
 
   const reinitialiserTout = async (): Promise<void> => {
     if (window.confirm('Êtes-vous sûr de vouloir tout réinitialiser ? Tous les vendeurs et l\'historique seront supprimés.')) {
       try {
         await actions.reinitialiser();
-        // L'état sera mis à jour automatiquement via le polling
+        setVendeursConfig([]);
       } catch (err) {
         alert('Erreur lors de la réinitialisation');
         console.error(err);
@@ -293,12 +247,8 @@ const terminerJournee = async (): Promise<void> => {
 
   const exporterDonnees = (): void => {
     const donnees = {
-      vendeurs,
-      ordreInitial,
-      ordre,
-      historique,
-      journeeActive,
-      vendeursData,
+      state,
+      vendeursConfig,
       isOnline,
       timestamp: new Date().toISOString()
     };
@@ -315,6 +265,8 @@ const terminerJournee = async (): Promise<void> => {
     URL.revokeObjectURL(url);
   };
 
+  // ========== HELPERS UI ==========
+
   const getStatusColor = () => {
     if (isLoading) return 'text-blue-600';
     if (!isOnline) return 'text-red-600';
@@ -326,6 +278,8 @@ const terminerJournee = async (): Promise<void> => {
     if (!isOnline) return 'Hors ligne';
     return 'En ligne';
   };
+
+  // ========== RENDU ==========
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -362,30 +316,30 @@ const terminerJournee = async (): Promise<void> => {
       )}
       
       {!journeeActive ? (
+        // Mode configuration (utilise vendeursConfig local)
         <ConfigurationVendeurs 
-          vendeurs={vendeurs}
-          onAjouterVendeur={ajouterVendeur}
-          onSupprimerVendeur={supprimerVendeur}
-          onMonterVendeur={monterVendeur}
-          onDescendreVendeur={descendreVendeur}
+          vendeurs={vendeursConfig}
+          onAjouterVendeur={ajouterVendeurConfig}
+          onSupprimerVendeur={supprimerVendeurConfig}
+          onMonterVendeur={monterVendeurConfig}
+          onDescendreVendeur={descendreVendeurConfig}
           onDemarrerJournee={demarrerJournee}
         />
-        
       ) : (
-  <>
-    {/* Ajout de vendeur en cours de journée */}
-    <AjoutVendeurJournee 
-      vendeursExistants={vendeurs}
-      onAjouterVendeur={ajouterVendeurEnCoursDeJournee}
-    />
-    
-    <GestionOrdre 
-      ordre={ordre}
-      ordreInitial={ordreInitial}
-      vendeursData={vendeursData}
-      onTerminerJournee={terminerJournee}
-    />
+        // Mode journée active (utilise state du serveur)
+        <>
+          <AjoutVendeurJournee 
+            vendeursExistants={vendeurs}
+            onAjouterVendeur={ajouterVendeurEnCoursDeJournee}
+          />
           
+          <GestionOrdre 
+            ordre={ordre}
+            ordreInitial={ordreInitial}
+            vendeursData={vendeursData}
+            onTerminerJournee={terminerJournee}
+          />
+                
           <GestionClients
             ordre={ordre}
             vendeursData={vendeursData}
@@ -408,7 +362,7 @@ const terminerJournee = async (): Promise<void> => {
         onReinitialiserTout={reinitialiserTout}
       />
 
-      {/* Notification en bas pour mode hors ligne */}
+      {/* Notification mode hors ligne */}
       {!isOnline && (
         <div className="fixed bottom-4 right-4 bg-orange-500 text-white p-4 rounded-lg shadow-lg max-w-xs">
           <p className="font-medium">⚠️ Mode hors ligne</p>
@@ -422,6 +376,7 @@ const terminerJournee = async (): Promise<void> => {
           <p className="text-sm">⏳ Synchronisation...</p>
         </div>
       )}
+
       {/* Récapitulatif de journée */}
       {afficherRecapitulatif && recapitulatifJournee && (
         <RecapitulatifJournee
@@ -430,9 +385,10 @@ const terminerJournee = async (): Promise<void> => {
             setAfficherRecapitulatif(false);
             setRecapitulatifJournee(null);
           }}
-  />
-)}
+        />
+      )}
     </div>
   );
 };
+
 export default TourDeLigneApp;

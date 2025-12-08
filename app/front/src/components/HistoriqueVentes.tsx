@@ -1,8 +1,15 @@
 import React from 'react';
-import { HistoriqueItem } from '../types';
+
+interface HistoriqueEntry {
+  date: string;
+  heure: string;
+  action: string;
+  vendeur?: string;
+  clientId?: string;
+}
 
 interface HistoriqueVentesProps {
-  historique: HistoriqueItem[];
+  historique: HistoriqueEntry[];
 }
 
 const HistoriqueVentes: React.FC<HistoriqueVentesProps> = ({ historique }) => {
@@ -26,18 +33,18 @@ const HistoriqueVentes: React.FC<HistoriqueVentesProps> = ({ historique }) => {
                   <td className="border p-2">{item.date}</td>
                   <td className="border p-2">{item.heure}</td>
                   <td className="border p-2">
-                    {item.action === 'vente' ? (
-                      <span className="text-green-600">✅ Vente par {item.vendeur}</span>
-                    ) : item.action === 'prise_client' ? (
-                      <span className="text-blue-600">👤 {item.vendeur} prend un client</span>
-                    ) : item.action === 'abandon_client' ? (
-                      <span className="text-orange-600">❌ {item.vendeur} abandonne un client</span>
-                    ) : item.action === 'demarrage' ? (
-                      <span className="text-blue-600">🚀 Démarrage journée</span>
-                    ) : item.action === 'fin' ? (
-                      <span className="text-red-600">🏁 Fin journée</span>
+                    {item.action.includes('Vente') ? (
+                      <span className="text-green-600">✅ {item.action}</span>
+                    ) : item.action.includes('Client pris') ? (
+                      <span className="text-blue-600">👤 {item.action}</span>
+                    ) : item.action.includes('abandonné') ? (
+                      <span className="text-orange-600">❌ {item.action}</span>
+                    ) : item.action.includes('Démarrage') ? (
+                      <span className="text-blue-600">🚀 {item.action}</span>
+                    ) : item.action.includes('ajouté') ? (
+                      <span className="text-purple-600">➕ {item.action}</span>
                     ) : (
-                      <span className="text-gray-600">{item.message || 'Action inconnue'}</span>
+                      <span className="text-gray-600">{item.action}</span>
                     )}
                   </td>
                 </tr>
