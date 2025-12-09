@@ -5,6 +5,7 @@ import { VendeurData } from '../types';
 interface GestionClientsProps {
   ordre: string[];
   vendeursData: Record<string, VendeurData>;
+  prochainVendeur: string | null;
   onPrendreClient: (vendeur: string) => void;
   onAbandonnerClient: (vendeur: string) => void;
 }
@@ -12,6 +13,7 @@ interface GestionClientsProps {
 const GestionClients: React.FC<GestionClientsProps> = ({
   ordre,
   vendeursData,
+  prochainVendeur,
   onPrendreClient,
   onAbandonnerClient
 }) => {
@@ -22,9 +24,6 @@ const GestionClients: React.FC<GestionClientsProps> = ({
   
   // Vendeurs occupés (avec client)
   const vendeursOccupes = ordre.filter(nom => vendeursData[nom]?.clientEnCours);
-  
-  // Prochain vendeur disponible
-  const prochainVendeur = vendeursDisponibles[0] ?? null;
   
   // Minimum de ventes parmi les disponibles
   const disponiblesData = vendeursDisponibles.map(nom => vendeursData[nom]).filter(Boolean);
@@ -59,6 +58,7 @@ const GestionClients: React.FC<GestionClientsProps> = ({
               const vendeurData = vendeursData[vendeur];
               const client = vendeurData?.clientEnCours;
               const nbVentes = vendeurData?.compteurVentes || 0;
+              const nbAbandons = vendeurData?.compteurAbandons || 0;
               
               if (!client) return null;
               
@@ -69,9 +69,9 @@ const GestionClients: React.FC<GestionClientsProps> = ({
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <strong>{vendeur}</strong>
-                      <span className="ml-2 text-sm text-gray-600">
-                        ({nbVentes} vente{nbVentes !== 1 ? 's' : ''})
-                      </span>
+                    <span className="ml-2 text-sm text-gray-600">
+                      ({nbVentes} vente{nbVentes !== 1 ? 's' : ''}{nbAbandons > 0 ? ` • ${nbAbandons} ab.` : ''})
+                    </span>
                     </div>
                     <span className="text-xs text-orange-600 font-medium">
                       {dureeClient}

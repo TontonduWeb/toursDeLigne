@@ -44,6 +44,7 @@ const TourDeLigneApp: React.FC = () => {
     vendeursData[v.nom] = {
       nom: v.nom,
       compteurVentes: v.ventes,
+      compteurAbandons: v.abandons || 0,
       clientEnCours: v.clientEnCours ? {
         id: v.clientEnCours.id,
         heureDebut: v.clientEnCours.heureDebut,
@@ -55,6 +56,8 @@ const TourDeLigneApp: React.FC = () => {
   // Ordre = liste des noms (le serveur gère déjà l'ordre)
   const ordre = vendeurs;
   const ordreInitial = vendeurs;
+  // Prochain vendeur calculé par le serveur (source de vérité)
+  const prochainVendeur = state?.ordreActuel?.prochainVendeur ?? null;
 
   // ========== ACTIONS DE CONFIGURATION (avant démarrage) ==========
 
@@ -337,12 +340,14 @@ const TourDeLigneApp: React.FC = () => {
             ordre={ordre}
             ordreInitial={ordreInitial}
             vendeursData={vendeursData}
+            prochainVendeur={prochainVendeur}
             onTerminerJournee={terminerJournee}
           />
                 
           <GestionClients
             ordre={ordre}
             vendeursData={vendeursData}
+            prochainVendeur={prochainVendeur}
             onPrendreClient={prendreClient}
             onAbandonnerClient={abandonnerClient}
           />

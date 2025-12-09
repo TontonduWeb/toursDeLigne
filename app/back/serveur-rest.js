@@ -26,6 +26,7 @@ function initDatabase() {
       CREATE TABLE IF NOT EXISTS vendeurs (
         nom TEXT PRIMARY KEY,
         ventes INTEGER DEFAULT 0,
+        abandons INTEGER DEFAULT 0,
         client_id TEXT,
         client_heure_debut TEXT,
         client_date_debut TEXT
@@ -72,10 +73,21 @@ function calculerProchainVendeur(vendeurs) {
   const disponibles = vendeurs.filter(v => !v.clientEnCours);
   if (disponibles.length === 0) return null;
   
-  const minVentes = Math.min(...disponibles.map(v => v.ventes));
-  const prioritaires = disponibles.filter(v => v.ventes === minVentes);
+  // Tri par : 1) ventes croissantes, 2) abandons croissants, 3) ordre initial (index)
+  disponibles.sort((a, b) => {
+    // 1. Priorité aux moins de ventes
+    if (a.ventes !== b.ventes) {
+      return a.ventes - b.ventes;
+    }
+    // 2. À égalité de ventes, priorité aux moins d'abandons
+    if (a.abandons !== b.abandons) {
+      return a.abandons - b.abandons;
+    }
+    // 3. À égalité totale, on garde l'ordre initial (déjà respecté par le tableau)
+    return 0;
+  });
   
-  return prioritaires[0]?.nom || null;
+  return disponibles[0]?.nom || null;
 }
 
 // ==================== ENDPOINTS API ====================
@@ -98,6 +110,7 @@ app.get('/api/state', (req, res) => {
         const vendeursData = vendeurs.map(v => ({
           nom: v.nom,
           ventes: v.ventes,
+          abandons: v.abandons || 0,
           clientEnCours: v.client_id ? {
             id: v.client_id,
             heureDebut: v.client_heure_debut,
@@ -274,11 +287,11 @@ app.post('/api/abandonner-client', (req, res) => {
       const maintenant = getAdjustedDate();
 
       db.serialize(() => {
-        // Libérer le vendeur
+        // Libérer le vendeur ET incrémenter les abandons
         db.run(
           `UPDATE vendeurs 
-           SET client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL
-           WHERE nom = ?`,
+            SET client_id = NULL, client_heure_debut = NULL, client_date_debut = NULL, abandons = abandons + 1
+            WHERE nom = ?`,
           [vendeur]
         );
 
@@ -592,6 +605,7 @@ app.get('/api/stats', (req, res) => {
     const vendeursData = vendeurs.map(v => ({
       nom: v.nom,
       ventes: v.ventes,
+      abandons: v.abandons || 0,
       clientEnCours: v.client_id ? {
         id: v.client_id,
         heureDebut: v.client_heure_debut,

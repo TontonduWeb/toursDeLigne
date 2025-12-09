@@ -2,6 +2,7 @@
 export interface VendeurData {
   nom: string;
   compteurVentes: number;
+  compteurAbandons: number;
   clientEnCours?: {
     id: string;
     heureDebut: string;

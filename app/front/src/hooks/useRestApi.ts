@@ -30,6 +30,7 @@ interface ServerState {
   vendeurs: Array<{
     nom: string;
     ventes: number;
+    abandons: number;
     clientEnCours: {
       id: string;
       heureDebut: string;

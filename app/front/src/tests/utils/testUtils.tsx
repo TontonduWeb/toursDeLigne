@@ -204,6 +204,7 @@ export const waitForLoadingToFinish = () => {
 export const createMockVendeurData = (overrides?: Partial<VendeurData>): VendeurData => ({
   nom: 'Test Vendeur',
   compteurVentes: 0,
+  compteurAbandons: 0,
   clientEnCours: undefined,
   ...overrides,
 });

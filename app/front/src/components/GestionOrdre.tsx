@@ -6,6 +6,7 @@ interface GestionOrdreProps {
   ordre: string[];
   ordreInitial: string[];
   vendeursData: Record<string, VendeurData>;
+  prochainVendeur: string | null;
   onTerminerJournee: () => void;
 }
 
@@ -13,6 +14,7 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   ordre,
   ordreInitial,
   vendeursData,
+  prochainVendeur,
   onTerminerJournee
 }) => {
   // ========== CALCULS LOCAUX (remplace vendeurService) ==========
@@ -31,9 +33,6 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   const minVentes = disponibles.length > 0 
     ? Math.min(...disponibles.map(v => v.compteurVentes)) 
     : 0;
-  
-  // Prochain vendeur disponible
-  const prochainVendeurDisponible = ordre.find(nom => !vendeursData[nom]?.clientEnCours) ?? null;
 
   // Le reste du composant reste identique...
 
@@ -72,19 +71,19 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
       {ordre.length > 0 ? (
         <>
           {/* Prochain vendeur disponible */}
-          {prochainVendeurDisponible && (
+          {prochainVendeur && (
             <div className="mb-6 p-4 bg-white rounded border text-center">
               <h3 className="font-bold text-green-700">Prochain vendeur disponible</h3>
               <div className="text-2xl font-bold text-green-600 mt-2">
-                {prochainVendeurDisponible}
+                {prochainVendeur}
               </div>
               <div className="text-sm text-gray-600 mt-1">
-                {vendeursData[prochainVendeurDisponible]?.compteurVentes || 0} vente(s)
+                {vendeursData[prochainVendeur]?.compteurVentes || 0} vente(s)
               </div>
             </div>
           )}
 
-          {!prochainVendeurDisponible && (
+          {!prochainVendeur && (
             <div className="mb-6 p-4 bg-yellow-50 rounded border text-center border-yellow-200">
               <h3 className="font-bold text-yellow-700">Tous les vendeurs sont occupés</h3>
               <div className="text-sm text-yellow-600 mt-1">
@@ -99,10 +98,11 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
             {ordre.map((vendeur, index) => {
               const vendeurData = vendeursData[vendeur];
               const nbVentes = vendeurData?.compteurVentes || 0;
+              const nbAbandons = vendeurData?.compteurAbandons || 0;
               const clientEnCours = vendeurData?.clientEnCours;
               const estMinimum = nbVentes === minVentes;
               const estDisponible = !clientEnCours;
-              const estProchain = vendeur === prochainVendeurDisponible;
+              const estProchain = vendeur === prochainVendeur;
               
               return (
                 <div 
@@ -117,9 +117,9 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
                     <span className="font-medium">
                       {index + 1}. {vendeur}
                     </span>
-                    <span className="text-sm text-gray-600">
-                      ({nbVentes} vente{nbVentes !== 1 ? 's' : ''})
-                    </span>
+                      <span className="text-sm text-gray-600">
+                        ({nbVentes} vente{nbVentes !== 1 ? 's' : ''}{nbAbandons > 0 ? ` • ${nbAbandons} abandon${nbAbandons !== 1 ? 's' : ''}` : ''})
+                      </span>
                     {estMinimum && estDisponible && (
                       <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
                         minimum
