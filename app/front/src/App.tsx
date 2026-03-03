@@ -6,6 +6,7 @@ import PageConnexion from './components/PageConnexion';
 import TourDeLigneApp from './components/TourDeLigneApp';
 import AdminLayout from './components/AdminLayout';
 import GestionUtilisateurs from './components/GestionUtilisateurs';
+import GestionPlanning from './components/GestionPlanning';
 
 const App: React.FC = () => {
   return (
@@ -31,6 +32,7 @@ const App: React.FC = () => {
           >
             <Route index element={<Navigate to="/admin/utilisateurs" replace />} />
             <Route path="utilisateurs" element={<GestionUtilisateurs />} />
+            <Route path="planning" element={<GestionPlanning />} />
           </Route>
         </Routes>
       </BrowserRouter>

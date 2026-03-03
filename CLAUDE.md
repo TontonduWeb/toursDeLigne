@@ -48,8 +48,9 @@ docker-services/
         │   │   │   ├── ActionButtons.tsx
         │   │   │   ├── PageConnexion.tsx        # Page login (sélection nom + pavé PIN)
         │   │   │   ├── RouteProtegee.tsx        # Guard auth + admin
-        │   │   │   ├── AdminLayout.tsx          # Shell admin avec navigation
-        │   │   │   └── GestionUtilisateurs.tsx  # CRUD utilisateurs (admin)
+        │   │   │   ├── AdminLayout.tsx          # Shell admin avec navigation onglets
+        │   │   │   ├── GestionUtilisateurs.tsx  # CRUD utilisateurs (admin)
+        │   │   │   └── GestionPlanning.tsx      # CRUD templates planning (admin)
         │   │   ├── contexts/
         │   │   │   └── AuthContext.tsx          # React Context auth
         │   │   ├── hooks/
@@ -69,7 +70,8 @@ docker-services/
             │   └── auth.js                     # verifierToken, verifierAdmin, genererToken
             ├── routes/
             │   ├── auth.js                     # /api/connexion, /api/connexion/vendeurs
-            │   └── utilisateurs.js             # CRUD /api/utilisateurs (admin)
+            │   ├── utilisateurs.js             # CRUD /api/utilisateurs (admin)
+            │   └── planning.js                 # CRUD /api/planning/templates (admin)
             ├── utils/
             │   └── dateUtils.js                # Décalage horaire (+2h pour UTC → FR)
             ├── data/
@@ -87,7 +89,8 @@ docker-services/
             │   │   ├── api.ventes.test.js
             │   │   ├── api.vendeurs.test.js
             │   │   ├── api.auth.test.js        # Tests auth (skip si AUTH_ACTIF=false)
-            │   │   └── api.utilisateurs.test.js # Tests CRUD utilisateurs
+            │   │   ├── api.utilisateurs.test.js # Tests CRUD utilisateurs
+            │   │   └── api.planning.test.js    # Tests CRUD templates planning
             │   └── e2e/                        # Playwright
             │       ├── app.spec.ts
             │       ├── journee-complete.spec.ts
@@ -128,6 +131,11 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | PUT     | `/api/utilisateurs/:id`      | Admin   | Modifier `{ nom?, pin?, actif? }`                |
 | DELETE  | `/api/utilisateurs/:id`      | Admin   | Supprimer un utilisateur                         |
 | GET     | `/api/utilisateurs/vendeurs-actifs` | Admin | Vendeurs actifs pour sélection           |
+| GET     | `/api/planning/templates`      | Admin   | Lister tous les templates (avec vendeurs) |
+| GET     | `/api/planning/templates/:id`  | Admin   | Détail d'un template                      |
+| POST    | `/api/planning/templates`      | Admin   | Créer `{ nom, vendeurs: [{utilisateur_id, ordre}] }` |
+| PUT     | `/api/planning/templates/:id`  | Admin   | Modifier nom et/ou composition            |
+| DELETE  | `/api/planning/templates/:id`  | Admin   | Supprimer (CASCADE sur vendeurs associés) |
 
 ---
 
@@ -175,12 +183,31 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 
 **Seed** : au démarrage, si la table est vide, un admin "Matthieu" avec PIN "0000" est créé automatiquement.
 
-### Tables planning (Phase 2 — schema posé, non exploité)
+### Table `planning_templates` (Phase 2 — CRUD actif)
 
-- `planning_templates` : templates réutilisables de composition d'équipe
-- `planning_template_vendeurs` : vendeurs associés à un template (avec ordre)
+| Colonne  | Type    | Description                                      |
+|----------|---------|--------------------------------------------------|
+| id       | INTEGER | Auto-increment PK                                |
+| nom      | TEXT    | Nom unique du template                           |
+| cree_le  | TEXT    | Date de création                                 |
+
+### Table `planning_template_vendeurs`
+
+| Colonne        | Type    | Description                                      |
+|----------------|---------|--------------------------------------------------|
+| id             | INTEGER | Auto-increment PK                                |
+| template_id    | INTEGER | FK → planning_templates(id) ON DELETE CASCADE    |
+| utilisateur_id | INTEGER | FK → utilisateurs(id)                            |
+| ordre          | INTEGER | Position du vendeur dans le template             |
+
+Contrainte : UNIQUE(template_id, utilisateur_id)
+
+### Tables planning journées (Phase 2 — schema posé, non exploité)
+
 - `planning_journees` : planification par date (statut: planifie/en_cours/termine)
 - `planning_journee_vendeurs` : vendeurs affectés à une journée (avec ordre et présence)
+
+**Note** : `PRAGMA foreign_keys = ON` est activé au démarrage pour que le CASCADE fonctionne.
 
 ---
 
@@ -216,12 +243,14 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | `/`                   | TourDeLigneApp        | Token requis     |
 | `/admin`              | AdminLayout           | Token + admin    |
 | `/admin/utilisateurs` | GestionUtilisateurs   | Token + admin    |
+| `/admin/planning`     | GestionPlanning       | Token + admin    |
 
 ### Fichiers backend auth
 
 - `middleware/auth.js` : `verifierToken`, `verifierAdmin`, `genererToken`, `JWT_SECRET`
 - `routes/auth.js` : endpoints publics de connexion
 - `routes/utilisateurs.js` : CRUD admin des utilisateurs
+- `routes/planning.js` : CRUD admin des templates de planning
 
 ### Variables d'environnement
 
@@ -623,7 +652,7 @@ const actions = {
 4. **Les composants enfants reçoivent les données en props** — ils ne font pas de fetch eux-mêmes
 5. **Après un POST, le state se rafraîchit automatiquement** — pas besoin de mettre à jour manuellement des states locaux
 6. **Tout nouvel endpoint métier doit être protégé** — ajouter `app.use('/api/nouvel-endpoint', verifierToken)` dans la section auth conditionnelle de `serveur-rest.js`
-7. **Les endpoints admin passent par `routes/utilisateurs.js`** — qui applique `verifierToken` + `verifierAdmin` automatiquement
+7. **Les endpoints admin passent par `routes/utilisateurs.js` ou `routes/planning.js`** — qui appliquent `verifierToken` + `verifierAdmin` automatiquement
 8. **Ne jamais stocker le PIN en clair** — toujours hasher avec bcrypt avant insertion
 
 ---

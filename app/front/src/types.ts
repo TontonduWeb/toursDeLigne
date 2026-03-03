@@ -76,3 +76,17 @@ export interface ConnexionResponse {
   token: string;
   utilisateur: Utilisateur;
 }
+
+// Types planning
+export interface TemplateVendeur {
+  utilisateur_id: number;
+  nom: string;
+  ordre: number;
+}
+
+export interface PlanningTemplate {
+  id: number;
+  nom: string;
+  vendeurs: TemplateVendeur[];
+  cree_le: string;
+}

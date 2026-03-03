@@ -7,6 +7,7 @@ const { getAdjustedDate } = require('./utils/dateUtils');
 const { verifierToken } = require('./middleware/auth');
 const creerRoutesAuth = require('./routes/auth');
 const creerRoutesUtilisateurs = require('./routes/utilisateurs');
+const creerRoutesPlanning = require('./routes/planning');
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     console.error('❌ Erreur ouverture DB:', err);
   } else {
     db.run('PRAGMA journal_mode=WAL');
+    db.run('PRAGMA foreign_keys = ON');
     initDatabase();
     seedAdmin();
   }
@@ -198,6 +200,9 @@ app.use(creerRoutesAuth(db));
 
 // Routes admin (utilisateurs)
 app.use(creerRoutesUtilisateurs(db));
+
+// Routes admin (planning)
+app.use(creerRoutesPlanning(db));
 
 // Middleware auth conditionnel sur les routes métier existantes
 const authActif = process.env.AUTH_ACTIF !== 'false';
@@ -655,8 +660,22 @@ app.post('/api/reinitialiser', (req, res) => {
     }
   });
 
+  const deletePlanningTemplateVendeurs = new Promise((resolve, reject) => {
+    db.run('DELETE FROM planning_template_vendeurs', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  const deletePlanningTemplates = new Promise((resolve, reject) => {
+    db.run('DELETE FROM planning_templates', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
   // Attendre que TOUT soit terminé avant de répondre
-  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig, deleteUtilisateurs])
+  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig, deleteUtilisateurs, deletePlanningTemplateVendeurs, deletePlanningTemplates])
     .then(async () => {
       if (process.env.NODE_ENV === 'test') {
         await seedAdminAsync();

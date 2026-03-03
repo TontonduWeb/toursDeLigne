@@ -1,9 +1,12 @@
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 
 const AdminLayout: React.FC = () => {
   const { utilisateur, deconnexion } = useAuthContext();
+  const location = useLocation();
+
+  const isActive = (path: string) => location.pathname.startsWith(path);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -36,13 +39,24 @@ const AdminLayout: React.FC = () => {
         <div className="max-w-4xl mx-auto px-4 flex gap-1">
           <Link
             to="/admin/utilisateurs"
-            className="px-4 py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-600"
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              isActive('/admin/utilisateurs')
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
           >
             Utilisateurs
           </Link>
-          <span className="px-4 py-3 text-sm font-medium text-gray-400 cursor-not-allowed">
-            Planning (bientôt)
-          </span>
+          <Link
+            to="/admin/planning"
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              isActive('/admin/planning')
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Planning
+          </Link>
         </div>
       </nav>
 
