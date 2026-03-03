@@ -90,3 +90,20 @@ export interface PlanningTemplate {
   vendeurs: TemplateVendeur[];
   cree_le: string;
 }
+
+// Types planning journées
+export interface JourneeVendeur {
+  utilisateur_id: number;
+  nom: string;
+  ordre: number;
+  present: number;
+}
+
+export interface PlanningJournee {
+  id: number;
+  date_journee: string;
+  template_id: number | null;
+  statut: 'planifie' | 'en_cours' | 'termine';
+  vendeurs: JourneeVendeur[];
+  cree_le: string;
+}

@@ -50,7 +50,8 @@ docker-services/
         │   │   │   ├── RouteProtegee.tsx        # Guard auth + admin
         │   │   │   ├── AdminLayout.tsx          # Shell admin avec navigation onglets
         │   │   │   ├── GestionUtilisateurs.tsx  # CRUD utilisateurs (admin)
-        │   │   │   └── GestionPlanning.tsx      # CRUD templates planning (admin)
+        │   │   │   ├── GestionPlanning.tsx      # CRUD templates planning (admin)
+        │   │   │   └── GestionJournees.tsx      # CRUD journées planning (admin)
         │   │   ├── contexts/
         │   │   │   └── AuthContext.tsx          # React Context auth
         │   │   ├── hooks/
@@ -90,7 +91,8 @@ docker-services/
             │   │   ├── api.vendeurs.test.js
             │   │   ├── api.auth.test.js        # Tests auth (skip si AUTH_ACTIF=false)
             │   │   ├── api.utilisateurs.test.js # Tests CRUD utilisateurs
-            │   │   └── api.planning.test.js    # Tests CRUD templates planning
+            │   │   ├── api.planning.test.js    # Tests CRUD templates planning
+            │   │   └── api.journees.test.js    # Tests CRUD journées planning
             │   └── e2e/                        # Playwright
             │       ├── app.spec.ts
             │       ├── journee-complete.spec.ts
@@ -136,6 +138,13 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | POST    | `/api/planning/templates`      | Admin   | Créer `{ nom, vendeurs: [{utilisateur_id, ordre}] }` |
 | PUT     | `/api/planning/templates/:id`  | Admin   | Modifier nom et/ou composition            |
 | DELETE  | `/api/planning/templates/:id`  | Admin   | Supprimer (CASCADE sur vendeurs associés) |
+| GET     | `/api/planning/journees`       | Admin   | Lister les journées (?du=&au= optionnel)  |
+| GET     | `/api/planning/journees/:id`   | Admin   | Détail d'une journée                      |
+| POST    | `/api/planning/journees`       | Admin   | Créer `{ date_journee, template_id?, vendeurs? }` |
+| PUT     | `/api/planning/journees/:id`   | Admin   | Modifier vendeurs (si statut=planifie)    |
+| DELETE  | `/api/planning/journees/:id`   | Admin   | Supprimer (si statut=planifie)            |
+| PUT     | `/api/planning/journees/:id/presence` | Admin | Toggle présence vendeur           |
+| GET     | `/api/planning-du-jour`        | Token   | Planning du jour (null si aucun)          |
 
 ---
 
@@ -244,6 +253,7 @@ Contrainte : UNIQUE(template_id, utilisateur_id)
 | `/admin`              | AdminLayout           | Token + admin    |
 | `/admin/utilisateurs` | GestionUtilisateurs   | Token + admin    |
 | `/admin/planning`     | GestionPlanning       | Token + admin    |
+| `/admin/journees`     | GestionJournees       | Token + admin    |
 
 ### Fichiers backend auth
 
@@ -400,6 +410,7 @@ npm run test:integration    # Intégration API uniquement
 
 # Tests auth spécifiques (AUTH_ACTIF=true)
 npm run test:auth           # Tests connexion + CRUD utilisateurs
+npm run test:auth:journees  # Tests CRUD journées planning
 
 # Tests E2E (nécessite front + back lancés)
 npm run test:e2e            # Playwright headless

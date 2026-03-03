@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PlanningJournee } from '../types';
 
 interface ConfigurationVendeursProps {
   vendeurs: string[];
@@ -7,6 +8,8 @@ interface ConfigurationVendeursProps {
   onMonterVendeur: (index: number) => void;
   onDescendreVendeur: (index: number) => void;
   onDemarrerJournee: () => void;
+  planningDuJour?: PlanningJournee | null;
+  onChargerPlanning?: () => void;
 }
 
 const ConfigurationVendeurs: React.FC<ConfigurationVendeursProps> = ({
@@ -15,7 +18,9 @@ const ConfigurationVendeurs: React.FC<ConfigurationVendeursProps> = ({
   onSupprimerVendeur,
   onMonterVendeur,
   onDescendreVendeur,
-  onDemarrerJournee
+  onDemarrerJournee,
+  planningDuJour,
+  onChargerPlanning,
 }) => {
   const [nouveauVendeur, setNouveauVendeur] = useState<string>('');
 
@@ -35,7 +40,27 @@ const ConfigurationVendeurs: React.FC<ConfigurationVendeursProps> = ({
   return (
     <div className="mb-8 p-4 bg-blue-50 rounded-lg">
       <h2 className="text-xl font-semibold mb-4">Configuration des Vendeurs</h2>
-      
+
+      {/* Bannière planning du jour */}
+      {planningDuJour && onChargerPlanning && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded-lg flex items-center justify-between">
+          <div>
+            <p className="font-medium text-green-800">
+              Planning du jour disponible ({planningDuJour.vendeurs.filter(v => v.present === 1).length} vendeur{planningDuJour.vendeurs.filter(v => v.present === 1).length > 1 ? 's' : ''})
+            </p>
+            <p className="text-sm text-green-600">
+              {planningDuJour.vendeurs.filter(v => v.present === 1).map(v => v.nom).join(', ')}
+            </p>
+          </div>
+          <button
+            onClick={onChargerPlanning}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+          >
+            Charger le planning du jour
+          </button>
+        </div>
+      )}
+
       {/* Section d'ajout */}
       <div className="flex mb-4">
         <input

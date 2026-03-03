@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useRestApi } from '../hooks/useRestApi';
 import { useAuthContext } from '../contexts/AuthContext';
-import { VendeurData } from '../types';
+import { VendeurData, PlanningJournee } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
 import AjoutVendeurJournee from './AjoutVendeurJournee';
 import GestionOrdre from './GestionOrdre';
@@ -25,6 +25,9 @@ const TourDeLigneApp: React.FC = () => {
   const [recapitulatifJournee, setRecapitulatifJournee] = useState<any>(null);
   const [afficherRecapitulatif, setAfficherRecapitulatif] = useState<boolean>(false);
 
+  // Planning du jour
+  const [planningDuJour, setPlanningDuJour] = useState<PlanningJournee | null>(null);
+
   const handleTokenExpire = useCallback(() => {
     deconnexion();
     navigate('/connexion', { replace: true });
@@ -38,11 +41,44 @@ const TourDeLigneApp: React.FC = () => {
     onTokenExpire: handleTokenExpire,
   });
 
-  // ========== VALEURS DÉRIVÉES (calculées à partir de state) ==========
-  
-  // La journée est active si le serveur a des vendeurs
+  // ========== PLANNING DU JOUR ==========
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082';
   const journeeActive = (state?.vendeurs?.length ?? 0) > 0;
-  
+
+  useEffect(() => {
+    if (!token || journeeActive) {
+      setPlanningDuJour(null);
+      return;
+    }
+
+    const fetchPlanningDuJour = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/planning-du-jour`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPlanningDuJour(data.journee);
+        }
+      } catch {
+        // Silencieux — pas critique
+      }
+    };
+
+    fetchPlanningDuJour();
+  }, [token, journeeActive, apiUrl]);
+
+  const chargerPlanningDansConfig = useCallback(() => {
+    if (!planningDuJour) return;
+    const vendeursPresents = planningDuJour.vendeurs
+      .filter(v => v.present === 1)
+      .sort((a, b) => a.ordre - b.ordre)
+      .map(v => v.nom);
+    setVendeursConfig(vendeursPresents);
+  }, [planningDuJour]);
+
+  // ========== VALEURS DÉRIVÉES (calculées à partir de state) ==========
+
   // Liste des noms de vendeurs (pour compatibilité avec composants existants)
   const vendeurs = state?.vendeurs?.map(v => v.nom) ?? [];
   
@@ -351,13 +387,15 @@ const TourDeLigneApp: React.FC = () => {
       
       {!journeeActive ? (
         // Mode configuration (utilise vendeursConfig local)
-        <ConfigurationVendeurs 
+        <ConfigurationVendeurs
           vendeurs={vendeursConfig}
           onAjouterVendeur={ajouterVendeurConfig}
           onSupprimerVendeur={supprimerVendeurConfig}
           onMonterVendeur={monterVendeurConfig}
           onDescendreVendeur={descendreVendeurConfig}
           onDemarrerJournee={demarrerJournee}
+          planningDuJour={planningDuJour}
+          onChargerPlanning={chargerPlanningDansConfig}
         />
       ) : (
         // Mode journée active (utilise state du serveur)

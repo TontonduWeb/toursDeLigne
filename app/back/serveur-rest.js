@@ -216,6 +216,7 @@ if (authActif) {
   app.use('/api/enregistrer-vente-directe', verifierToken);
   app.use('/api/terminer-journee', verifierToken);
   app.use('/api/ajouter-vendeur', verifierToken);
+  app.use('/api/planning-du-jour', verifierToken);
 }
 
 // ==================== ENDPOINTS API ====================
@@ -626,66 +627,35 @@ app.post('/api/terminer-journee', (req, res) => {
 });
 
 // POST /api/reinitialiser - Réinitialiser tout
-app.post('/api/reinitialiser', (req, res) => {
-  // Utiliser des Promises pour attendre la fin de chaque opération
-  const deleteVendeurs = new Promise((resolve, reject) => {
-    db.run('DELETE FROM vendeurs', (err) => {
+app.post('/api/reinitialiser', async (req, res) => {
+  const runDelete = (sql) => new Promise((resolve, reject) => {
+    db.run(sql, (err) => {
       if (err) reject(err);
       else resolve();
     });
   });
 
-  const deleteHistorique = new Promise((resolve, reject) => {
-    db.run('DELETE FROM historique', (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  const deleteConfig = new Promise((resolve, reject) => {
-    db.run('DELETE FROM config', (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  const deleteUtilisateurs = new Promise((resolve, reject) => {
+  try {
+    // Supprimer d'abord les tables enfants (FK), puis les parents
+    await runDelete('DELETE FROM planning_journee_vendeurs');
+    await runDelete('DELETE FROM planning_template_vendeurs');
+    await runDelete('DELETE FROM planning_journees');
+    await runDelete('DELETE FROM planning_templates');
     if (process.env.NODE_ENV === 'test') {
-      db.run('DELETE FROM utilisateurs', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    } else {
-      resolve();
+      await runDelete('DELETE FROM utilisateurs');
     }
-  });
+    await runDelete('DELETE FROM vendeurs');
+    await runDelete('DELETE FROM historique');
+    await runDelete('DELETE FROM config');
 
-  const deletePlanningTemplateVendeurs = new Promise((resolve, reject) => {
-    db.run('DELETE FROM planning_template_vendeurs', (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  const deletePlanningTemplates = new Promise((resolve, reject) => {
-    db.run('DELETE FROM planning_templates', (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  // Attendre que TOUT soit terminé avant de répondre
-  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig, deleteUtilisateurs, deletePlanningTemplateVendeurs, deletePlanningTemplates])
-    .then(async () => {
-      if (process.env.NODE_ENV === 'test') {
-        await seedAdminAsync();
-      }
-      res.json({ success: true, message: 'Réinitialisation complète' });
-    })
-    .catch((err) => {
-      console.error('❌ Erreur réinitialisation:', err);
-      res.status(500).json({ error: err.message });
-    });
+    if (process.env.NODE_ENV === 'test') {
+      await seedAdminAsync();
+    }
+    res.json({ success: true, message: 'Réinitialisation complète' });
+  } catch (err) {
+    console.error('❌ Erreur réinitialisation:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/ajouter-vendeur - Ajouter un vendeur en cours de journée
@@ -742,6 +712,40 @@ app.post('/api/ajouter-vendeur', (req, res) => {
           }
         );
       });
+    }
+  );
+});
+
+// GET /api/planning-du-jour - Planning du jour (accessible par tous les utilisateurs authentifiés)
+app.get('/api/planning-du-jour', (req, res) => {
+  const aujourdhui = getAdjustedDate().toISOString().split('T')[0];
+
+  db.get(
+    'SELECT * FROM planning_journees WHERE date_journee = ?',
+    [aujourdhui],
+    (err, journee) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!journee) {
+        return res.json({ journee: null });
+      }
+
+      db.all(
+        `SELECT pjv.utilisateur_id, pjv.ordre, pjv.present, u.nom
+         FROM planning_journee_vendeurs pjv
+         JOIN utilisateurs u ON u.id = pjv.utilisateur_id
+         WHERE pjv.journee_id = ?
+         ORDER BY pjv.ordre`,
+        [journee.id],
+        (err, vendeurs) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ journee: { ...journee, vendeurs: vendeurs || [] } });
+        }
+      );
     }
   );
 });
