@@ -17,3 +17,5 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8082
+      - AUTH_ACTIF=true
+      - JWT_SECRET=${JWT_SECRET:-tour-de-ligne-prod-secret-changez-moi}

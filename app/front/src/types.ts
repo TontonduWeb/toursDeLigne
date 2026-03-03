@@ -49,3 +49,30 @@ export interface HistoriqueItem {
   message?: string;
   nouvelOrdre?: string;
 }
+
+// Types auth
+export interface Utilisateur {
+  id: number;
+  nom: string;
+  role: 'admin' | 'vendeur';
+  actif?: number;
+  cree_le?: string;
+}
+
+export interface AuthState {
+  token: string | null;
+  utilisateur: Utilisateur | null;
+  estConnecte: boolean;
+  estAdmin: boolean;
+}
+
+export interface ConnexionPayload {
+  nom: string;
+  pin: string;
+}
+
+export interface ConnexionResponse {
+  success: boolean;
+  token: string;
+  utilisateur: Utilisateur;
+}

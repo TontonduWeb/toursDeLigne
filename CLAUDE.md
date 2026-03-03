@@ -14,8 +14,9 @@ Le système fonctionne sur plusieurs terminaux (tablettes/téléphones) en temps
 
 ### Stack
 
-- **Frontend** : React 18 + TypeScript + Tailwind CSS
+- **Frontend** : React 18 + TypeScript + Tailwind CSS + react-router-dom v6
 - **Backend** : Node.js / Express + SQLite
+- **Auth** : JWT 12h (jsonwebtoken) + PIN hashé (bcryptjs)
 - **Synchronisation** : REST API avec polling toutes les 3 secondes
 - **Conteneurisation** : Docker Compose + Nginx reverse proxy
 - **SSL** : Cloudflare (terminaison SSL) + Let's Encrypt
@@ -44,9 +45,16 @@ docker-services/
         │   │   │   ├── EnregistrementVentes.tsx
         │   │   │   ├── HistoriqueVentes.tsx
         │   │   │   ├── RecapitulatifJournee.tsx
-        │   │   │   └── ActionButtons.tsx
+        │   │   │   ├── ActionButtons.tsx
+        │   │   │   ├── PageConnexion.tsx        # Page login (sélection nom + pavé PIN)
+        │   │   │   ├── RouteProtegee.tsx        # Guard auth + admin
+        │   │   │   ├── AdminLayout.tsx          # Shell admin avec navigation
+        │   │   │   └── GestionUtilisateurs.tsx  # CRUD utilisateurs (admin)
+        │   │   ├── contexts/
+        │   │   │   └── AuthContext.tsx          # React Context auth
         │   │   ├── hooks/
         │   │   │   ├── useRestApi.ts           # Hook central de communication API + polling
+        │   │   │   ├── useAuth.ts              # Hook auth (token, connexion, déconnexion)
         │   │   │   └── useLocalStorage.ts      # (legacy, non utilisé pour l'état métier)
         │   │   ├── types/                      # Types TypeScript partagés
         │   │   └── utils/
@@ -56,12 +64,19 @@ docker-services/
         │   └── package.json
         │
         └── back/                           # Backend Express
-            ├── serveur-rest.js                 # Serveur principal + tous les endpoints
+            ├── serveur-rest.js                 # Serveur principal + endpoints métier
+            ├── middleware/
+            │   └── auth.js                     # verifierToken, verifierAdmin, genererToken
+            ├── routes/
+            │   ├── auth.js                     # /api/connexion, /api/connexion/vendeurs
+            │   └── utilisateurs.js             # CRUD /api/utilisateurs (admin)
             ├── utils/
             │   └── dateUtils.js                # Décalage horaire (+2h pour UTC → FR)
             ├── data/
             │   └── tour-de-ligne.db            # Base SQLite (volume Docker)
             ├── tests/
+            │   ├── helpers/
+            │   │   └── authHelper.js           # Génération tokens pour tests
             │   ├── unit/
             │   │   ├── vendeur.logic.test.js
             │   │   └── date.utils.test.js
@@ -70,7 +85,9 @@ docker-services/
             │   │   ├── api.journee.test.js
             │   │   ├── api.clients.test.js
             │   │   ├── api.ventes.test.js
-            │   │   └── api.vendeurs.test.js
+            │   │   ├── api.vendeurs.test.js
+            │   │   ├── api.auth.test.js        # Tests auth (skip si AUTH_ACTIF=false)
+            │   │   └── api.utilisateurs.test.js # Tests CRUD utilisateurs
             │   └── e2e/                        # Playwright
             │       ├── app.spec.ts
             │       ├── journee-complete.spec.ts
@@ -91,19 +108,26 @@ docker-services/
 
 Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ovh/api` (prod via Nginx)
 
-| Méthode | Endpoint                     | Description                                     |
-|---------|------------------------------|-------------------------------------------------|
-| GET     | `/api/state`                 | État complet (vendeurs, ordre, historique)       |
-| GET     | `/api/stats`                 | Statistiques agrégées                            |
-| GET     | `/api/health`                | Health check                                     |
-| POST    | `/api/demarrer-journee`      | Démarrer une journée (`{ vendeurs: string[] }`)  |
-| POST    | `/api/prendre-client`        | Attribuer un client (`{ vendeur: string }`)      |
-| POST    | `/api/abandonner-client`     | Abandonner un client (`{ vendeur: string }`)     |
-| POST    | `/api/enregistrer-vente`     | Enregistrer une vente (`{ vendeur: string }`)    |
-| POST    | `/api/enregistrer-vente-directe` | Vente sans client préalable (`{ vendeur }`)  |
-| POST    | `/api/ajouter-vendeur`       | Ajouter un vendeur en cours de journée           |
-| POST    | `/api/terminer-journee`      | Clôturer la journée (retourne `exportData`)      |
-| POST    | `/api/reinitialiser`         | Réinitialiser toutes les données                 |
+| Méthode | Endpoint                     | Auth    | Description                                     |
+|---------|------------------------------|---------|-------------------------------------------------|
+| GET     | `/api/connexion/vendeurs`    | Public  | Liste des noms pour la page de login             |
+| POST    | `/api/connexion`             | Public  | Login `{ nom, pin }` → `{ token, utilisateur }` |
+| GET     | `/api/health`                | Public  | Health check                                     |
+| GET     | `/api/state`                 | Token   | État complet (vendeurs, ordre, historique)       |
+| GET     | `/api/stats`                 | Token   | Statistiques agrégées                            |
+| POST    | `/api/demarrer-journee`      | Token   | Démarrer une journée (`{ vendeurs: string[] }`)  |
+| POST    | `/api/prendre-client`        | Token   | Attribuer un client (`{ vendeur: string }`)      |
+| POST    | `/api/abandonner-client`     | Token   | Abandonner un client (`{ vendeur: string }`)     |
+| POST    | `/api/enregistrer-vente`     | Token   | Enregistrer une vente (`{ vendeur: string }`)    |
+| POST    | `/api/enregistrer-vente-directe` | Token | Vente sans client préalable (`{ vendeur }`)  |
+| POST    | `/api/ajouter-vendeur`       | Token   | Ajouter un vendeur en cours de journée           |
+| POST    | `/api/terminer-journee`      | Token   | Clôturer la journée (retourne `exportData`)      |
+| POST    | `/api/reinitialiser`         | —       | Réinitialiser toutes les données                 |
+| GET     | `/api/utilisateurs`          | Admin   | Liste complète des utilisateurs                  |
+| POST    | `/api/utilisateurs`          | Admin   | Créer `{ nom, pin, role? }`                      |
+| PUT     | `/api/utilisateurs/:id`      | Admin   | Modifier `{ nom?, pin?, actif? }`                |
+| DELETE  | `/api/utilisateurs/:id`      | Admin   | Supprimer un utilisateur                         |
+| GET     | `/api/utilisateurs/vendeurs-actifs` | Admin | Vendeurs actifs pour sélection           |
 
 ---
 
@@ -137,6 +161,74 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 |---------|------|-----------------------|
 | key     | TEXT | Clé de configuration  |
 | value   | TEXT | Valeur                |
+
+### Table `utilisateurs`
+
+| Colonne  | Type    | Description                                      |
+|----------|---------|--------------------------------------------------|
+| id       | INTEGER | Auto-increment PK                                |
+| nom      | TEXT    | Nom unique                                       |
+| pin_hash | TEXT    | PIN hashé (bcrypt)                               |
+| role     | TEXT    | 'admin' ou 'vendeur'                             |
+| actif    | INTEGER | 1 = actif, 0 = désactivé                        |
+| cree_le  | TEXT    | Date de création                                 |
+
+**Seed** : au démarrage, si la table est vide, un admin "Matthieu" avec PIN "0000" est créé automatiquement.
+
+### Tables planning (Phase 2 — schema posé, non exploité)
+
+- `planning_templates` : templates réutilisables de composition d'équipe
+- `planning_template_vendeurs` : vendeurs associés à un template (avec ordre)
+- `planning_journees` : planification par date (statut: planifie/en_cours/termine)
+- `planning_journee_vendeurs` : vendeurs affectés à une journée (avec ordre et présence)
+
+---
+
+## Authentification
+
+### Architecture
+
+- **JWT 12h** stocké en `localStorage` (clé `tour-de-ligne-token`)
+- **PIN 4 chiffres** hashé avec `bcryptjs` (rounds=10)
+- **Variable `AUTH_ACTIF`** : si `false`, le middleware auth est désactivé (tests existants passent sans modification)
+- **Pas de refresh token** : re-login en 2 secondes avec un PIN, complexité injustifiée
+
+### Flux de connexion
+
+1. `GET /api/connexion/vendeurs` → liste des noms actifs (affichés comme boutons)
+2. Sélection du nom → saisie PIN via pavé numérique tactile
+3. `POST /api/connexion { nom, pin }` → serveur vérifie bcrypt → retourne `{ token, utilisateur }`
+4. Token stocké en localStorage, envoyé dans `Authorization: Bearer <token>` à chaque requête
+5. Si le serveur répond 401, le frontend appelle `deconnexion()` et redirige vers `/connexion`
+
+### Rôles
+
+| Rôle     | Accès                                        |
+|----------|----------------------------------------------|
+| vendeur  | Tour de ligne (page principale `/`)          |
+| admin    | Tour de ligne + Administration (`/admin/*`)  |
+
+### Routes frontend
+
+| Path                  | Composant             | Protection       |
+|-----------------------|-----------------------|------------------|
+| `/connexion`          | PageConnexion         | Public           |
+| `/`                   | TourDeLigneApp        | Token requis     |
+| `/admin`              | AdminLayout           | Token + admin    |
+| `/admin/utilisateurs` | GestionUtilisateurs   | Token + admin    |
+
+### Fichiers backend auth
+
+- `middleware/auth.js` : `verifierToken`, `verifierAdmin`, `genererToken`, `JWT_SECRET`
+- `routes/auth.js` : endpoints publics de connexion
+- `routes/utilisateurs.js` : CRUD admin des utilisateurs
+
+### Variables d'environnement
+
+| Variable    | Défaut                                  | Description                    |
+|-------------|-----------------------------------------|--------------------------------|
+| `JWT_SECRET`| `tour-de-ligne-dev-secret-key`          | Clé de signature JWT           |
+| `AUTH_ACTIF`| `true`                                  | `false` désactive le middleware|
 
 ---
 
@@ -201,6 +293,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8082
+      - AUTH_ACTIF=true
+      - JWT_SECRET=${JWT_SECRET:-tour-de-ligne-prod-secret-changez-moi}
 ```
 
 ### Points d'attention Docker
@@ -269,11 +363,14 @@ Sinon, l'URL par défaut dans `useRestApi.ts` est `http://192.168.1.27:8082` (IP
 ### Commandes
 
 ```bash
-# Tests unitaires + intégration (backend)
+# Tests unitaires + intégration (backend, AUTH_ACTIF=false)
 cd app/back
-npm test                    # Tous les tests Jest
+npm test                    # Tous les tests Jest (auth désactivée)
 npm run test:unit           # Unit uniquement
 npm run test:integration    # Intégration API uniquement
+
+# Tests auth spécifiques (AUTH_ACTIF=true)
+npm run test:auth           # Tests connexion + CRUD utilisateurs
 
 # Tests E2E (nécessite front + back lancés)
 npm run test:e2e            # Playwright headless
@@ -394,10 +491,12 @@ Le hook expose un objet `state` de type `ServerState` mis à jour toutes les 3 s
 const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
   baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
   pollingInterval: 3000,
+  token,                    // JWT depuis useAuthContext()
+  onTokenExpire: handleTokenExpire,  // Redirige vers /connexion
 });
 ```
 
-Le `fetchState` interne fait un `GET /api/state` et met à jour `setState(data)`. C'est tout.
+Le `fetchState` interne fait un `GET /api/state` avec le header `Authorization: Bearer <token>` et met à jour `setState(data)`. Si le serveur répond 401, `onTokenExpire` est appelé. Si `token` est null, le polling ne démarre pas.
 
 ### 2. `TourDeLigneApp.tsx` — Valeurs dérivées, pas d'états locaux métier
 
@@ -523,6 +622,9 @@ const actions = {
 3. **Toute nouvelle logique métier va dans `serveur-rest.js`** — le frontend ne fait qu'afficher
 4. **Les composants enfants reçoivent les données en props** — ils ne font pas de fetch eux-mêmes
 5. **Après un POST, le state se rafraîchit automatiquement** — pas besoin de mettre à jour manuellement des states locaux
+6. **Tout nouvel endpoint métier doit être protégé** — ajouter `app.use('/api/nouvel-endpoint', verifierToken)` dans la section auth conditionnelle de `serveur-rest.js`
+7. **Les endpoints admin passent par `routes/utilisateurs.js`** — qui applique `verifierToken` + `verifierAdmin` automatiquement
+8. **Ne jamais stocker le PIN en clair** — toujours hasher avec bcrypt avant insertion
 
 ---
 

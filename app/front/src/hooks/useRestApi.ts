@@ -49,12 +49,16 @@ interface ServerState {
 interface UseRestApiOptions {
   baseUrl?: string;
   pollingInterval?: number;
+  token?: string | null;
+  onTokenExpire?: () => void;
 }
 
 export const useRestApi = (options: UseRestApiOptions = {}) => {
   const {
     baseUrl = 'http://192.168.1.27:8082',
     pollingInterval = 3000,
+    token = null,
+    onTokenExpire,
   } = options;
 
   const [state, setState] = useState<ServerState | null>(null);
@@ -66,14 +70,29 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
   const isMountedRef = useRef(true);
 
   const fetchState = useCallback(async () => {
+  if (!token) return; // Pas de polling sans token
+
   try {
-    const response = await fetch(`${baseUrl}/api/state`);
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/state`, { headers });
+
+    if (response.status === 401) {
+      if (isMountedRef.current && onTokenExpire) {
+        onTokenExpire();
+      }
+      return;
+    }
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
+
     const data: ServerState = await response.json();
 
     if (isMountedRef.current) {
-      setState(data);  // ← Juste ça, plus de callback
+      setState(data);
       setIsOnline(true);
       setError(null);
     }
@@ -84,20 +103,30 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
       setIsOnline(false);
     }
   }
-}, [baseUrl]);
+}, [baseUrl, token, onTokenExpire]);
 
   // Fonction générique pour faire des requêtes POST
   const postRequest = useCallback(async (endpoint: string, payload: any = {}) => {
   setIsLoading(true);
-  
+
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify(payload)
     });
+
+    if (response.status === 401) {
+      if (onTokenExpire) onTokenExpire();
+      throw new Error('Session expirée');
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -105,13 +134,13 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
     }
 
     const data = await response.json();
-    
-    // ✅ ATTENDRE un peu avant de rafraîchir pour laisser le serveur terminer
+
+    // Attendre un peu avant de rafraîchir pour laisser le serveur terminer
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Rafraîchir l'état après une mutation
     await fetchState();
-    
+
     return data;
   } catch (err) {
     const error = err instanceof Error ? err : new Error('Unknown error');
@@ -120,7 +149,7 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
   } finally {
     setIsLoading(false);
   }
-}, [baseUrl, fetchState]);
+}, [baseUrl, fetchState, token, onTokenExpire]);
 
   // Actions métier
   const actions = {
@@ -157,18 +186,28 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
   // Fonction pour obtenir les stats
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(`${baseUrl}/api/stats`);
-      
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${baseUrl}/api/stats`, { headers });
+
+      if (response.status === 401) {
+        if (onTokenExpire) onTokenExpire();
+        throw new Error('Session expirée');
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (err) {
       console.error('Erreur fetch stats:', err);
       throw err;
     }
-  }, [baseUrl]);
+  }, [baseUrl, token, onTokenExpire]);
 
   // Démarrer le polling
   const startPolling = useCallback(() => {

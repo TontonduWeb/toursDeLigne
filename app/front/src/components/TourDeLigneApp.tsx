@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useRestApi } from '../hooks/useRestApi';
+import { useAuthContext } from '../contexts/AuthContext';
 import { VendeurData } from '../types';
 import ConfigurationVendeurs from './ConfigurationVendeurs';
 import AjoutVendeurJournee from './AjoutVendeurJournee';
@@ -11,20 +13,29 @@ import ActionButtons from './ActionButtons';
 import RecapitulatifJournee from './RecapitulatifJournee';
 
 const TourDeLigneApp: React.FC = () => {
+  const { token, utilisateur, estAdmin, deconnexion } = useAuthContext();
+  const navigate = useNavigate();
+
   // ========== ÉTATS LOCAUX (uniquement ce qui n'est PAS sur le serveur) ==========
-  
+
   // Configuration avant démarrage (pas encore envoyée au serveur)
   const [vendeursConfig, setVendeursConfig] = useState<string[]>([]);
-  
+
   // Récapitulatif après clôture
   const [recapitulatifJournee, setRecapitulatifJournee] = useState<any>(null);
   const [afficherRecapitulatif, setAfficherRecapitulatif] = useState<boolean>(false);
+
+  const handleTokenExpire = useCallback(() => {
+    deconnexion();
+    navigate('/connexion', { replace: true });
+  }, [deconnexion, navigate]);
 
   // ========== HOOK REST API (source unique de vérité) ==========
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
     baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
     pollingInterval: 3000,
-    // Plus de onStateUpdate ! Le state est utilisé directement
+    token,
+    onTokenExpire: handleTokenExpire,
   });
 
   // ========== VALEURS DÉRIVÉES (calculées à partir de state) ==========
@@ -286,8 +297,28 @@ const TourDeLigneApp: React.FC = () => {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-center">Gestion du Tour de Ligne</h1>
-      
+      {/* Header avec info utilisateur */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Gestion du Tour de Ligne</h1>
+        <div className="flex items-center gap-3">
+          {estAdmin && (
+            <Link
+              to="/admin"
+              className="text-sm px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+            >
+              Administration
+            </Link>
+          )}
+          <span className="text-sm text-gray-600">{utilisateur?.nom}</span>
+          <button
+            onClick={() => { deconnexion(); navigate('/connexion', { replace: true }); }}
+            className="text-sm px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+          >
+            Se déconnecter
+          </button>
+        </div>
+      </div>
+
       {/* Indicateur de statut */}
       <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-center">
@@ -305,7 +336,7 @@ const TourDeLigneApp: React.FC = () => {
             className="ml-4 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
             disabled={isLoading}
           >
-            🔄 Actualiser
+            Actualiser
           </button>
         </div>
       </div>

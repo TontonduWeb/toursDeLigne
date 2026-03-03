@@ -2,7 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const bcrypt = require('bcryptjs');
 const { getAdjustedDate } = require('./utils/dateUtils');
+const { verifierToken } = require('./middleware/auth');
+const creerRoutesAuth = require('./routes/auth');
+const creerRoutesUtilisateurs = require('./routes/utilisateurs');
 
 const app = express();
 app.use(cors());
@@ -14,7 +18,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ Erreur ouverture DB:', err);
   } else {
+    db.run('PRAGMA journal_mode=WAL');
     initDatabase();
+    seedAdmin();
   }
 });
 
@@ -60,6 +66,101 @@ function initDatabase() {
         value TEXT
       )
     `);
+
+    // Table des utilisateurs (vendeurs + admin)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS utilisateurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL UNIQUE,
+        pin_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'vendeur' CHECK(role IN ('admin', 'vendeur')),
+        actif INTEGER NOT NULL DEFAULT 1,
+        cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    // Templates réutilisables (Phase 2)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS planning_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL UNIQUE,
+        cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS planning_template_vendeurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL,
+        utilisateur_id INTEGER NOT NULL,
+        ordre INTEGER NOT NULL,
+        FOREIGN KEY (template_id) REFERENCES planning_templates(id) ON DELETE CASCADE,
+        FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id),
+        UNIQUE(template_id, utilisateur_id)
+      )
+    `);
+
+    // Planning effectif par journée (Phase 2)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS planning_journees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date_journee TEXT NOT NULL UNIQUE,
+        template_id INTEGER,
+        statut TEXT NOT NULL DEFAULT 'planifie' CHECK(statut IN ('planifie', 'en_cours', 'termine')),
+        cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (template_id) REFERENCES planning_templates(id)
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS planning_journee_vendeurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journee_id INTEGER NOT NULL,
+        utilisateur_id INTEGER NOT NULL,
+        ordre INTEGER NOT NULL,
+        present INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (journee_id) REFERENCES planning_journees(id) ON DELETE CASCADE,
+        FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id),
+        UNIQUE(journee_id, utilisateur_id)
+      )
+    `);
+  });
+}
+
+// Seed admin au démarrage si la table utilisateurs est vide
+function seedAdmin() {
+  seedAdminAsync().catch(err => console.error('Erreur seed admin:', err));
+}
+
+function seedAdminAsync() {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT COUNT(*) as count FROM utilisateurs', [], async (err, row) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      if (row.count === 0) {
+        try {
+          const pinHash = await bcrypt.hash('0000', 10);
+          db.run(
+            "INSERT INTO utilisateurs (nom, pin_hash, role) VALUES (?, ?, 'admin')",
+            ['Matthieu', pinHash],
+            (err) => {
+              if (err) {
+                reject(err);
+              } else {
+                console.log('Admin "Matthieu" créé avec PIN par défaut: 0000');
+                resolve();
+              }
+            }
+          );
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
@@ -88,6 +189,28 @@ function calculerProchainVendeur(vendeurs) {
   });
   
   return disponibles[0]?.nom || null;
+}
+
+// ==================== AUTH & ROUTES ====================
+
+// Routes publiques (auth)
+app.use(creerRoutesAuth(db));
+
+// Routes admin (utilisateurs)
+app.use(creerRoutesUtilisateurs(db));
+
+// Middleware auth conditionnel sur les routes métier existantes
+const authActif = process.env.AUTH_ACTIF !== 'false';
+if (authActif) {
+  app.use('/api/state', verifierToken);
+  app.use('/api/stats', verifierToken);
+  app.use('/api/demarrer-journee', verifierToken);
+  app.use('/api/prendre-client', verifierToken);
+  app.use('/api/abandonner-client', verifierToken);
+  app.use('/api/enregistrer-vente', verifierToken);
+  app.use('/api/enregistrer-vente-directe', verifierToken);
+  app.use('/api/terminer-journee', verifierToken);
+  app.use('/api/ajouter-vendeur', verifierToken);
 }
 
 // ==================== ENDPOINTS API ====================
@@ -521,9 +644,23 @@ app.post('/api/reinitialiser', (req, res) => {
     });
   });
 
+  const deleteUtilisateurs = new Promise((resolve, reject) => {
+    if (process.env.NODE_ENV === 'test') {
+      db.run('DELETE FROM utilisateurs', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    } else {
+      resolve();
+    }
+  });
+
   // Attendre que TOUT soit terminé avant de répondre
-  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig])
-    .then(() => {
+  Promise.all([deleteVendeurs, deleteHistorique, deleteConfig, deleteUtilisateurs])
+    .then(async () => {
+      if (process.env.NODE_ENV === 'test') {
+        await seedAdminAsync();
+      }
       res.json({ success: true, message: 'Réinitialisation complète' });
     })
     .catch((err) => {
@@ -672,4 +809,4 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 // ✅ EXPORTER pour les tests
-module.exports = { app, db, initDatabase };
+module.exports = { app, db, initDatabase, seedAdmin };
