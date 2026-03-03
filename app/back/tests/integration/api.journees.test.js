@@ -450,6 +450,118 @@ describeAuth('API - Planning Journées (AUTH_ACTIF=true)', () => {
     });
   });
 
+  describe('Transition automatique des statuts', () => {
+    it('devrait passer le statut à en_cours quand la journée démarre', async () => {
+      const aujourdhui = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Créer une journée planifiée pour aujourd'hui
+      const createRes = await request(app)
+        .post('/api/planning/journees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          date_journee: aujourdhui,
+          vendeurs: [
+            { utilisateur_id: vendeurIds[0], ordre: 1 },
+            { utilisateur_id: vendeurIds[1], ordre: 2 }
+          ]
+        });
+      const journeeId = createRes.body.journee.id;
+
+      // Démarrer la journée avec les noms des vendeurs
+      await request(app)
+        .post('/api/demarrer-journee')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vendeurs: ['Alice', 'Bob'] })
+        .expect(200);
+
+      // Laisser le temps à l'UPDATE fire-and-forget
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Vérifier que le statut est passé à en_cours
+      const res = await request(app)
+        .get(`/api/planning/journees/${journeeId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(res.body.journee.statut).toBe('en_cours');
+    });
+
+    it('devrait passer le statut à termine quand la journée se termine', async () => {
+      const aujourdhui = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Créer une journée planifiée pour aujourd'hui
+      const createRes = await request(app)
+        .post('/api/planning/journees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          date_journee: aujourdhui,
+          vendeurs: [
+            { utilisateur_id: vendeurIds[0], ordre: 1 },
+            { utilisateur_id: vendeurIds[1], ordre: 2 }
+          ]
+        });
+      const journeeId = createRes.body.journee.id;
+
+      // Démarrer la journée
+      await request(app)
+        .post('/api/demarrer-journee')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vendeurs: ['Alice', 'Bob'] })
+        .expect(200);
+
+      // Terminer la journée
+      await request(app)
+        .post('/api/terminer-journee')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      // Laisser le temps à l'UPDATE fire-and-forget
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Vérifier que le statut est passé à termine
+      const res = await request(app)
+        .get(`/api/planning/journees/${journeeId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(res.body.journee.statut).toBe('termine');
+    });
+
+    it('ne devrait pas affecter les journées d\'autres dates', async () => {
+      const demain = new Date(Date.now() + 2 * 60 * 60 * 1000 + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Créer une journée planifiée pour demain
+      const createRes = await request(app)
+        .post('/api/planning/journees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          date_journee: demain,
+          vendeurs: [
+            { utilisateur_id: vendeurIds[0], ordre: 1 }
+          ]
+        });
+      const journeeId = createRes.body.journee.id;
+
+      // Démarrer une journée aujourd'hui (sans planning)
+      await request(app)
+        .post('/api/demarrer-journee')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vendeurs: ['Alice'] })
+        .expect(200);
+
+      // Laisser le temps à l'UPDATE fire-and-forget
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Vérifier que la journée de demain reste planifiée
+      const res = await request(app)
+        .get(`/api/planning/journees/${journeeId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(res.body.journee.statut).toBe('planifie');
+    });
+  });
+
   describe('GET /api/planning-du-jour', () => {
     it('devrait retourner null si aucune journée aujourd\'hui', async () => {
       const res = await request(app)

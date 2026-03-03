@@ -120,13 +120,13 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | GET     | `/api/health`                | Public  | Health check                                     |
 | GET     | `/api/state`                 | Token   | État complet (vendeurs, ordre, historique)       |
 | GET     | `/api/stats`                 | Token   | Statistiques agrégées                            |
-| POST    | `/api/demarrer-journee`      | Token   | Démarrer une journée (`{ vendeurs: string[] }`)  |
+| POST    | `/api/demarrer-journee`      | Token   | Démarrer une journée (`{ vendeurs: string[] }`) + passe la journée planifiée du jour à `en_cours` |
 | POST    | `/api/prendre-client`        | Token   | Attribuer un client (`{ vendeur: string }`)      |
 | POST    | `/api/abandonner-client`     | Token   | Abandonner un client (`{ vendeur: string }`)     |
 | POST    | `/api/enregistrer-vente`     | Token   | Enregistrer une vente (`{ vendeur: string }`)    |
 | POST    | `/api/enregistrer-vente-directe` | Token | Vente sans client préalable (`{ vendeur }`)  |
 | POST    | `/api/ajouter-vendeur`       | Token   | Ajouter un vendeur en cours de journée           |
-| POST    | `/api/terminer-journee`      | Token   | Clôturer la journée (retourne `exportData`)      |
+| POST    | `/api/terminer-journee`      | Token   | Clôturer la journée (retourne `exportData`) + passe la journée du jour à `termine` |
 | POST    | `/api/reinitialiser`         | —       | Réinitialiser toutes les données                 |
 | GET     | `/api/utilisateurs`          | Admin   | Liste complète des utilisateurs                  |
 | POST    | `/api/utilisateurs`          | Admin   | Créer `{ nom, pin, role? }`                      |
@@ -211,10 +211,12 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 
 Contrainte : UNIQUE(template_id, utilisateur_id)
 
-### Tables planning journées (Phase 2 — schema posé, non exploité)
+### Tables planning journées (Phase 2 — actif)
 
 - `planning_journees` : planification par date (statut: planifie/en_cours/termine)
 - `planning_journee_vendeurs` : vendeurs affectés à une journée (avec ordre et présence)
+
+**Transition automatique des statuts** : `POST /api/demarrer-journee` passe la journée du jour de `planifie` à `en_cours`. `POST /api/terminer-journee` passe de `planifie`/`en_cours` à `termine`. Les gardes empêchent la modification/suppression d'une journée `en_cours` ou `termine`.
 
 **Note** : `PRAGMA foreign_keys = ON` est activé au démarrage pour que le CASCADE fonctionne.
 

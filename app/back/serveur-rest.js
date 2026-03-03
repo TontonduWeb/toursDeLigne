@@ -321,6 +321,13 @@ app.post('/api/demarrer-journee', (req, res) => {
                   // Pas critique, on répond quand même
                 }
                 
+                // Mettre à jour le statut de la journée planifiée si elle existe
+                const aujourdhui = getAdjustedDate().toISOString().split('T')[0];
+                db.run(
+                  "UPDATE planning_journees SET statut = 'en_cours' WHERE date_journee = ? AND statut = 'planifie'",
+                  [aujourdhui]
+                );
+
                 console.log(`✅ Journée démarrée avec ${vendeurs.length} vendeurs`);
                 res.json({ success: true, message: 'Journée démarrée' });
               }
@@ -614,7 +621,14 @@ app.post('/api/terminer-journee', (req, res) => {
               return res.status(500).json({ error: err.message });
             }
 
-            res.json({ 
+            // Mettre à jour le statut de la journée planifiée si elle existe
+            const aujourdhui = getAdjustedDate().toISOString().split('T')[0];
+            db.run(
+              "UPDATE planning_journees SET statut = 'termine' WHERE date_journee = ? AND statut IN ('planifie', 'en_cours')",
+              [aujourdhui]
+            );
+
+            res.json({
               success: true, 
               message: 'Journée clôturée avec succès',
               exportData: exportData
