@@ -374,18 +374,50 @@ services:
 - Les services communiquent par **noms de conteneur** (pas `localhost`) sur le réseau `internal`
 - Le frontend est un **build statique** monté en volume read-only dans Nginx (pas un conteneur séparé)
 - SQLite nécessite une image **Debian-based** (`node:18-slim`) — Alpine cause des erreurs binaires
-- Le dossier `data/` est persisté via un volume Docker
+- Le dossier `data/` est persisté via un volume Docker et **ignoré par git** (`.gitignore`) pour éviter les conflits
+- Le `Dockerfile` backend doit copier **tous les dossiers** de code source : `serveur-rest.js`, `utils/`, `middleware/`, `routes/`
+- Le `initDatabase()` est asynchrone (`db.serialize`) — le `seedAdmin()` doit être appelé **dans le callback** pour éviter `SQLITE_ERROR: no such table`
+
+### Architecture Nginx (production)
+
+Le nginx principal (`docker-services/docker-compose.yml`) gère tous les sites. La config Tour de Ligne est dans `/etc/nginx/conf.d/tours-de-ligne.conf` **à l'intérieur du conteneur nginx** (pas montée en volume).
+
+**Proxy API** : nginx utilise un resolver dynamique avec variable `$upstream_tour`. Quand `proxy_pass` utilise une variable, nginx ne concatène plus l'URI automatiquement. La directive correcte est :
+
+```nginx
+proxy_pass http://$upstream_tour:8082$request_uri;  # ✅ Correct
+# proxy_pass http://$upstream_tour:8082/api/;       # ❌ Tronque l'URI
+```
+
+**Attention** : cette config est dans le conteneur, pas dans un volume monté. Elle sera perdue au `docker-compose up --build` du nginx. Pour modifier durablement, éditer le fichier source et rebuild.
+
+### URL API frontend (production vs dev)
+
+Le fallback API dans le code frontend est `''` (chaîne vide = URL relative). En production, nginx proxie `/api/` vers le backend, donc les URLs relatives fonctionnent.
+
+**Piège** : le fichier `.env.production` dans `app/front/` surcharge `REACT_APP_API_URL` au moment du `npm run build`. Si ce fichier contient `http://localhost:8082`, le build de prod pointera vers localhost. La valeur correcte en production est **vide** :
+
+```env
+# app/front/.env.production
+REACT_APP_API_URL=
+```
+
+En dev local, utiliser `.env` avec `REACT_APP_API_URL=http://localhost:8082`.
 
 ### Commandes de déploiement
 
 ```bash
+# Pull les changements
+cd ~/docker-services/tours-de-ligne
+git pull
+
 # Backend : rebuild + restart
-cd ~/docker-services
-docker-compose up -d --build tour-ligne-api
+cd ~/docker-services/tours-de-ligne
+docker-compose up -d --build
 
 # Frontend : rebuild local puis Nginx sert automatiquement
 cd ~/docker-services/tours-de-ligne/app/front
-npm install && npm run build
+npm run build
 docker restart nginx
 
 # Logs
@@ -426,7 +458,7 @@ Créer un fichier `.env` dans `app/front/` :
 REACT_APP_API_URL=http://localhost:8082
 ```
 
-Sinon, l'URL par défaut dans `useRestApi.ts` est `http://192.168.1.27:8082` (IP réseau local).
+Le fallback dans le code est `''` (URL relative). En dev, le `.env` pointe vers le backend local.
 
 ---
 
