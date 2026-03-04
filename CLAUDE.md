@@ -18,6 +18,7 @@ Le système fonctionne sur plusieurs terminaux (tablettes/téléphones) en temps
 - **Backend** : Node.js / Express + SQLite
 - **Auth** : JWT 12h (jsonwebtoken) + PIN hashé (bcryptjs)
 - **Synchronisation** : REST API avec polling toutes les 3 secondes
+- **PWA** : Service Worker vanilla (cache assets, network-only API), manifest installable
 - **Conteneurisation** : Docker Compose + Nginx reverse proxy
 - **SSL** : Cloudflare (terminaison SSL) + Let's Encrypt
 - **Tests** : Jest + Supertest (unit/intégration), Playwright (E2E), React Testing Library (composants)
@@ -51,7 +52,8 @@ docker-services/
         │   │   │   ├── AdminLayout.tsx          # Shell admin avec navigation onglets
         │   │   │   ├── GestionUtilisateurs.tsx  # CRUD utilisateurs (admin)
         │   │   │   ├── GestionPlanning.tsx      # CRUD templates planning (admin)
-        │   │   │   └── GestionJournees.tsx      # CRUD journées planning (admin)
+        │   │   │   ├── GestionJournees.tsx      # Planning journées (admin) — vue semaine, duplication, présence masse
+        │   │   │   └── GestionStatistiques.tsx  # Statistiques & archives (admin) — dashboard semaine/mois, classement, export CSV
         │   │   ├── contexts/
         │   │   │   └── AuthContext.tsx          # React Context auth
         │   │   ├── hooks/
@@ -72,7 +74,8 @@ docker-services/
             ├── routes/
             │   ├── auth.js                     # /api/connexion, /api/connexion/vendeurs
             │   ├── utilisateurs.js             # CRUD /api/utilisateurs (admin)
-            │   └── planning.js                 # CRUD /api/planning/templates (admin)
+            │   ├── planning.js                 # CRUD /api/planning/templates + journées (admin)
+            │   └── archives.js                 # Archives journées + stats agrégées (admin)
             ├── utils/
             │   └── dateUtils.js                # Décalage horaire (+2h pour UTC → FR)
             ├── data/
@@ -92,7 +95,8 @@ docker-services/
             │   │   ├── api.auth.test.js        # Tests auth (skip si AUTH_ACTIF=false)
             │   │   ├── api.utilisateurs.test.js # Tests CRUD utilisateurs
             │   │   ├── api.planning.test.js    # Tests CRUD templates planning
-            │   │   └── api.journees.test.js    # Tests CRUD journées planning
+            │   │   ├── api.journees.test.js    # Tests CRUD journées planning
+            │   │   └── api.archives.test.js    # Tests archives + stats agrégées
             │   └── e2e/                        # Playwright
             │       ├── app.spec.ts
             │       ├── journee-complete.spec.ts
@@ -126,6 +130,8 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | POST    | `/api/enregistrer-vente`     | Token   | Enregistrer une vente (`{ vendeur: string }`)    |
 | POST    | `/api/enregistrer-vente-directe` | Token | Vente sans client préalable (`{ vendeur }`)  |
 | POST    | `/api/ajouter-vendeur`       | Token   | Ajouter un vendeur en cours de journée           |
+| POST    | `/api/pauser-vendeur`        | Token   | Mettre un vendeur en pause (`{ vendeur }`)       |
+| POST    | `/api/reprendre-vendeur`     | Token   | Reprendre un vendeur en pause (`{ vendeur }`)    |
 | POST    | `/api/terminer-journee`      | Token   | Clôturer la journée (retourne `exportData`) + passe la journée du jour à `termine` |
 | POST    | `/api/reinitialiser`         | —       | Réinitialiser toutes les données                 |
 | GET     | `/api/utilisateurs`          | Admin   | Liste complète des utilisateurs                  |
@@ -144,7 +150,12 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | PUT     | `/api/planning/journees/:id`   | Admin   | Modifier vendeurs (si statut=planifie)    |
 | DELETE  | `/api/planning/journees/:id`   | Admin   | Supprimer (si statut=planifie)            |
 | PUT     | `/api/planning/journees/:id/presence` | Admin | Toggle présence vendeur           |
+| PUT     | `/api/planning/journees/:id/presence-masse` | Admin | Toggle présence tous vendeurs `{ present: bool }` |
 | GET     | `/api/planning-du-jour`        | Token   | Planning du jour (null si aucun)          |
+| GET     | `/api/archives/journees`         | Admin   | Lister archives (?du=&au= optionnel, sans blob donnees) |
+| GET     | `/api/archives/journees/:id`     | Admin   | Détail archive (avec donnees parsé)       |
+| GET     | `/api/archives/journees/:id/csv` | Admin   | Export CSV (Vendeur;Ventes;Abandons)      |
+| GET     | `/api/archives/stats`            | Admin   | Stats agrégées sur période (?du=&au= requis) |
 
 ---
 
@@ -159,6 +170,8 @@ Base URL : `http://localhost:8082` (dev) / `https://frontend.serveur-matthieu.ov
 | client_id          | TEXT    | ID du client en cours (nullable)   |
 | client_heure_debut | TEXT    | Heure de prise en charge           |
 | client_date_debut  | TEXT    | Date de prise en charge            |
+| en_pause           | INTEGER | 1 = en pause, 0 = actif (défaut 0) |
+| heure_pause        | TEXT    | Heure de mise en pause (nullable)  |
 
 ### Table `historique`
 
@@ -220,6 +233,20 @@ Contrainte : UNIQUE(template_id, utilisateur_id)
 
 **Note** : `PRAGMA foreign_keys = ON` est activé au démarrage pour que le CASCADE fonctionne.
 
+### Table `journee_archives` (Phase 3 — archivage)
+
+| Colonne        | Type    | Description                                      |
+|----------------|---------|--------------------------------------------------|
+| id             | INTEGER | Auto-increment PK                                |
+| date_journee   | TEXT    | Date UNIQUE (YYYY-MM-DD)                         |
+| total_vendeurs | INTEGER | Nombre de vendeurs à la clôture                  |
+| total_ventes   | INTEGER | Total des ventes de la journée                   |
+| moyenne_ventes | REAL    | Moyenne ventes par vendeur                       |
+| donnees        | TEXT    | JSON blob complet (exportData)                   |
+| cree_le        | TEXT    | Date de création                                 |
+
+`INSERT OR REPLACE` : si terminé 2x le même jour, la 2e archive écrase la 1ère. L'archivage se fait dans `POST /api/terminer-journee` AVANT la suppression des vendeurs/historique.
+
 ---
 
 ## Authentification
@@ -256,6 +283,7 @@ Contrainte : UNIQUE(template_id, utilisateur_id)
 | `/admin/utilisateurs` | GestionUtilisateurs   | Token + admin    |
 | `/admin/planning`     | GestionPlanning       | Token + admin    |
 | `/admin/journees`     | GestionJournees       | Token + admin    |
+| `/admin/statistiques` | GestionStatistiques   | Token + admin    |
 
 ### Fichiers backend auth
 
@@ -278,14 +306,14 @@ Contrainte : UNIQUE(template_id, utilisateur_id)
 Le système de sélection du prochain vendeur suit un tri à trois niveaux :
 
 1. **Nombre de ventes** (ascendant) — le vendeur avec le moins de ventes est prioritaire
-2. **Disponibilité** — seuls les vendeurs sans client en cours sont éligibles
+2. **Disponibilité** — seuls les vendeurs sans client en cours **et pas en pause** sont éligibles
 3. **Ordre initial** (tiebreaker) — en cas d'égalité, l'ordre de démarrage de la journée est respecté
 
 Calcul côté serveur (`calculerProchainVendeur` dans `serveur-rest.js`) :
 
 ```javascript
 function calculerProchainVendeur(vendeurs) {
-  const disponibles = vendeurs.filter(v => !v.clientEnCours);
+  const disponibles = vendeurs.filter(v => !v.clientEnCours && !v.en_pause);
   if (disponibles.length === 0) return null;
   const minVentes = Math.min(...disponibles.map(v => v.ventes));
   const prioritaires = disponibles.filter(v => v.ventes === minVentes);
@@ -301,6 +329,9 @@ function calculerProchainVendeur(vendeurs) {
 - L'abandon remet le vendeur en disponible à sa position dans l'ordre
 - Les **vendeurs occupés** sont affichés en fin de liste côté UI
 - Limite : **1 à 20 vendeurs** par journée
+- Un vendeur **en pause** est exclu du calcul de priorité (ni disponible, ni occupé)
+- La **pause est interdite** si le vendeur a un client en cours (erreur 400)
+- La **durée de pause** est calculée à la reprise et loggée dans l'historique
 
 ---
 
@@ -413,6 +444,7 @@ npm run test:integration    # Intégration API uniquement
 # Tests auth spécifiques (AUTH_ACTIF=true)
 npm run test:auth           # Tests connexion + CRUD utilisateurs
 npm run test:auth:journees  # Tests CRUD journées planning
+npm run test:auth:archives  # Tests archives + stats agrégées
 
 # Tests E2E (nécessite front + back lancés)
 npm run test:e2e            # Playwright headless
@@ -496,8 +528,12 @@ Disponible ──→ Occupé (client en cours) ──→ Disponible (après vent
      │                    │
      │                    └──→ Disponible (après abandon)
      │
-     └──→ Occupé (prend un client)
+     ├──→ Occupé (prend un client)
+     │
+     └──→ En pause ──→ Disponible (reprend)
 ```
+
+Note : la mise en pause est **interdite** si le vendeur a un client en cours.
 
 # Architecture "Trust the Server" — Tour de Ligne
 
@@ -688,6 +724,8 @@ interface ServerState {
       heureDebut: string;
       dateDebut: string;
     } | null;
+    en_pause: boolean;       // true si le vendeur est en pause
+    heure_pause: string | null; // Heure de mise en pause (format fr-FR)
   }>;
   historique: Array<{
     date: string;
@@ -703,7 +741,7 @@ interface ServerState {
 
 ```javascript
 function calculerProchainVendeur(vendeurs) {
-  const disponibles = vendeurs.filter(v => !v.clientEnCours);
+  const disponibles = vendeurs.filter(v => !v.clientEnCours && !v.en_pause);
   if (disponibles.length === 0) return null;
 
   disponibles.sort((a, b) => {

@@ -8,6 +8,8 @@ interface GestionOrdreProps {
   vendeursData: Record<string, VendeurData>;
   prochainVendeur: string | null;
   onTerminerJournee: () => void;
+  onPauserVendeur: (vendeur: string) => void;
+  onReprendreVendeur: (vendeur: string) => void;
 }
 
 const GestionOrdre: React.FC<GestionOrdreProps> = ({
@@ -15,7 +17,9 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   ordreInitial,
   vendeursData,
   prochainVendeur,
-  onTerminerJournee
+  onTerminerJournee,
+  onPauserVendeur,
+  onReprendreVendeur
 }) => {
   // ========== CALCULS LOCAUX (remplace vendeurService) ==========
   
@@ -24,14 +28,15 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
   // Statistiques
   const totalVendeurs = vendeursList.length;
   const vendeursOccupes = vendeursList.filter(v => v.clientEnCours).length;
-  const vendeursDisponibles = totalVendeurs - vendeursOccupes;
+  const vendeursEnPause = vendeursList.filter(v => v.en_pause).length;
+  const vendeursDisponibles = totalVendeurs - vendeursOccupes - vendeursEnPause;
   const totalVentes = vendeursList.reduce((sum, v) => sum + v.compteurVentes, 0);
   const moyenneVentes = totalVendeurs > 0 ? (totalVentes / totalVendeurs).toFixed(1) : '0';
-  
-  // Minimum de ventes parmi les disponibles
-  const disponibles = vendeursList.filter(v => !v.clientEnCours);
-  const minVentes = disponibles.length > 0 
-    ? Math.min(...disponibles.map(v => v.compteurVentes)) 
+
+  // Minimum de ventes parmi les disponibles (excluant en pause)
+  const disponibles = vendeursList.filter(v => !v.clientEnCours && !v.en_pause);
+  const minVentes = disponibles.length > 0
+    ? Math.min(...disponibles.map(v => v.compteurVentes))
     : 0;
 
   // Le reste du composant reste identique...
@@ -49,7 +54,7 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
       </div>
 
       {/* Statistiques générales */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className={`grid grid-cols-2 ${vendeursEnPause > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4 mb-6`}>
         <div className="bg-white p-3 rounded border text-center">
           <div className="text-2xl font-bold text-blue-600">{totalVendeurs}</div>
           <div className="text-sm text-gray-600">Vendeurs total</div>
@@ -62,6 +67,12 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
           <div className="text-2xl font-bold text-orange-600">{vendeursOccupes}</div>
           <div className="text-sm text-gray-600">Avec clients</div>
         </div>
+        {vendeursEnPause > 0 && (
+          <div className="bg-white p-3 rounded border text-center">
+            <div className="text-2xl font-bold text-purple-600">{vendeursEnPause}</div>
+            <div className="text-sm text-gray-600">En pause</div>
+          </div>
+        )}
         <div className="bg-white p-3 rounded border text-center">
           <div className="text-2xl font-bold text-purple-600">{totalVentes}</div>
           <div className="text-sm text-gray-600">Ventes totales</div>
@@ -93,23 +104,25 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
           )}
           
           {/* Ordre complet avec statuts */}
-          <h3 className="font-semibold mb-3">Ordre complet (disponibles puis occupés)</h3>
+          <h3 className="font-semibold mb-3">Ordre complet (disponibles, en pause, occupés)</h3>
           <div className="space-y-2 mb-4">
             {ordre.map((vendeur, index) => {
               const vendeurData = vendeursData[vendeur];
               const nbVentes = vendeurData?.compteurVentes || 0;
               const nbAbandons = vendeurData?.compteurAbandons || 0;
               const clientEnCours = vendeurData?.clientEnCours;
+              const enPause = vendeurData?.en_pause || false;
               const estMinimum = nbVentes === minVentes;
-              const estDisponible = !clientEnCours;
+              const estDisponible = !clientEnCours && !enPause;
               const estProchain = vendeur === prochainVendeur;
-              
+
               return (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className={`p-3 rounded border flex justify-between items-center ${
                     estProchain ? 'bg-green-100 border-green-300 font-bold' :
-                    !estDisponible ? 'bg-orange-50 border-orange-200' :
+                    enPause ? 'bg-purple-100 border-purple-300' :
+                    clientEnCours ? 'bg-orange-50 border-orange-200' :
                     estMinimum ? 'bg-yellow-50 border-yellow-300' : 'bg-white'
                   }`}
                 >
@@ -126,9 +139,21 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
-                    {clientEnCours ? (
+                    {enPause ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-purple-700 font-medium">
+                          ⏸ En pause
+                        </span>
+                        <button
+                          onClick={() => onReprendreVendeur(vendeur)}
+                          className="text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600"
+                        >
+                          Reprendre
+                        </button>
+                      </div>
+                    ) : clientEnCours ? (
                       <div className="text-right">
                         <div className="text-xs text-orange-600 font-medium">
                           👤 Client en cours
@@ -138,9 +163,17 @@ const GestionOrdre: React.FC<GestionOrdreProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <span className="text-xs text-green-600 font-medium">
-                        ✅ Disponible
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-green-600 font-medium">
+                          ✅ Disponible
+                        </span>
+                        <button
+                          onClick={() => onPauserVendeur(vendeur)}
+                          className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
+                        >
+                          Pause
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

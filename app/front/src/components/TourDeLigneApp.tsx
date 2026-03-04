@@ -96,7 +96,9 @@ const TourDeLigneApp: React.FC = () => {
         id: v.clientEnCours.id,
         heureDebut: v.clientEnCours.heureDebut,
         dateDebut: v.clientEnCours.dateDebut
-      } : undefined
+      } : undefined,
+      en_pause: v.en_pause || false,
+      heure_pause: v.heure_pause || null
     };
   });
 
@@ -274,6 +276,24 @@ const TourDeLigneApp: React.FC = () => {
     }
   };
 
+  const pauserVendeur = async (vendeur: string): Promise<void> => {
+    try {
+      await actions.pauserVendeur(vendeur);
+    } catch (err) {
+      alert(`Erreur: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+      console.error(err);
+    }
+  };
+
+  const reprendreVendeur = async (vendeur: string): Promise<void> => {
+    try {
+      await actions.reprendreVendeur(vendeur);
+    } catch (err) {
+      alert(`Erreur: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+      console.error(err);
+    }
+  };
+
   const ajouterVendeurEnCoursDeJournee = async (vendeur: string): Promise<void> => {
     try {
       await actions.ajouterVendeur(vendeur);
@@ -405,12 +425,14 @@ const TourDeLigneApp: React.FC = () => {
             onAjouterVendeur={ajouterVendeurEnCoursDeJournee}
           />
           
-          <GestionOrdre 
+          <GestionOrdre
             ordre={ordre}
             ordreInitial={ordreInitial}
             vendeursData={vendeursData}
             prochainVendeur={prochainVendeur}
             onTerminerJournee={terminerJournee}
+            onPauserVendeur={pauserVendeur}
+            onReprendreVendeur={reprendreVendeur}
           />
                 
           <GestionClients
@@ -419,6 +441,8 @@ const TourDeLigneApp: React.FC = () => {
             prochainVendeur={prochainVendeur}
             onPrendreClient={prendreClient}
             onAbandonnerClient={abandonnerClient}
+            onPauserVendeur={pauserVendeur}
+            onReprendreVendeur={reprendreVendeur}
           />
           
           <EnregistrementVentes 

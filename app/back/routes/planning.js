@@ -650,6 +650,44 @@ function creerRoutesPlanning(db) {
     }
   });
 
+  // PUT /api/planning/journees/:id/presence-masse — basculer la présence de tous les vendeurs
+  router.put('/api/planning/journees/:id/presence-masse', async (req, res) => {
+    const { present } = req.body;
+
+    if (typeof present !== 'boolean') {
+      return res.status(400).json({ error: 'Le champ present (boolean) est requis' });
+    }
+
+    try {
+      const journee = await chargerJournee(req.params.id);
+      if (!journee) {
+        return res.status(404).json({ error: 'Journée non trouvée' });
+      }
+      if (journee.statut !== 'planifie') {
+        return res.status(400).json({ error: 'Seules les journées planifiées peuvent être modifiées' });
+      }
+
+      await new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE planning_journee_vendeurs SET present = ? WHERE journee_id = ?',
+          [present ? 1 : 0, req.params.id],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+
+      const vendeursResult = await chargerVendeursJournee(req.params.id);
+      res.json({
+        success: true,
+        journee: { ...journee, vendeurs: vendeursResult }
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 }
 

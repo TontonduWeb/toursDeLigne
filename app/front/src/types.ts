@@ -8,6 +8,8 @@ export interface VendeurData {
     heureDebut: string;
     dateDebut: string;
   };
+  en_pause: boolean;
+  heure_pause: string | null;
 }
 
 export interface ServerVendeur {
@@ -18,6 +20,8 @@ export interface ServerVendeur {
     heureDebut: string;
     dateDebut: string;
   } | null;
+  en_pause: boolean;
+  heure_pause: string | null;
 }
 
 export interface ServerState {
@@ -106,4 +110,47 @@ export interface PlanningJournee {
   statut: 'planifie' | 'en_cours' | 'termine';
   vendeurs: JourneeVendeur[];
   cree_le: string;
+}
+
+// Types archives
+export interface ArchiveJournee {
+  id: number;
+  date_journee: string;
+  total_vendeurs: number;
+  total_ventes: number;
+  moyenne_ventes: number;
+  cree_le: string;
+}
+
+export interface ArchiveJourneeDetail extends ArchiveJournee {
+  donnees: {
+    dateClôture: string;
+    heureClôture: string;
+    timestamp: string;
+    statistiques: {
+      totalVendeurs: number;
+      totalVentes: number;
+      moyenneVentes: string;
+    };
+    vendeurs: Array<{
+      nom: string;
+      ventes: number;
+      abandons?: number;
+      clientEnCours: { id: string; heureDebut: string; dateDebut: string } | null;
+    }>;
+    historique: Array<{
+      date: string;
+      heure: string;
+      action: string;
+      vendeur?: string;
+      clientId?: string;
+    }>;
+  };
+}
+
+export interface StatsAgregees {
+  nbJournees: number;
+  totalVentes: number;
+  moyenneParJour: number;
+  classementVendeurs: Array<{ nom: string; totalVentes: number; nbJournees: number }>;
 }

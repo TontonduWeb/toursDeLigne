@@ -206,6 +206,8 @@ export const createMockVendeurData = (overrides?: Partial<VendeurData>): Vendeur
   compteurVentes: 0,
   compteurAbandons: 0,
   clientEnCours: undefined,
+  en_pause: false,
+  heure_pause: null,
   ...overrides,
 });
 

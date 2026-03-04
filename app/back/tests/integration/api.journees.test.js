@@ -450,6 +450,73 @@ describeAuth('API - Planning Journées (AUTH_ACTIF=true)', () => {
     });
   });
 
+  describe('PUT /api/planning/journees/:id/presence-masse', () => {
+    let journeeId;
+
+    beforeEach(async () => {
+      const res = await request(app)
+        .post('/api/planning/journees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          date_journee: '2026-03-10',
+          vendeurs: [
+            { utilisateur_id: vendeurIds[0], ordre: 1 },
+            { utilisateur_id: vendeurIds[1], ordre: 2 }
+          ]
+        });
+      journeeId = res.body.journee.id;
+    });
+
+    it('devrait mettre tous les vendeurs absents', async () => {
+      const res = await request(app)
+        .put(`/api/planning/journees/${journeeId}/presence-masse`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ present: false })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.journee.vendeurs).toHaveLength(2);
+      expect(res.body.journee.vendeurs.every(v => v.present === 0)).toBe(true);
+    });
+
+    it('devrait mettre tous les vendeurs présents', async () => {
+      // D'abord les mettre absents
+      await request(app)
+        .put(`/api/planning/journees/${journeeId}/presence-masse`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ present: false });
+
+      // Puis les remettre présents
+      const res = await request(app)
+        .put(`/api/planning/journees/${journeeId}/presence-masse`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ present: true })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.journee.vendeurs.every(v => v.present === 1)).toBe(true);
+    });
+
+    it('devrait rejeter si statut !== planifie', async () => {
+      await new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE planning_journees SET statut = ? WHERE id = ?',
+          ['en_cours', journeeId],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+
+      await request(app)
+        .put(`/api/planning/journees/${journeeId}/presence-masse`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ present: false })
+        .expect(400);
+    });
+  });
+
   describe('Transition automatique des statuts', () => {
     it('devrait passer le statut à en_cours quand la journée démarre', async () => {
       const aujourdhui = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().split('T')[0];

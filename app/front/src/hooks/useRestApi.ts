@@ -36,6 +36,8 @@ interface ServerState {
       heureDebut: string;
       dateDebut: string;
     } | null;
+    en_pause: boolean;
+    heure_pause: string | null;
   }>;
   historique: Array<{
     date: string;
@@ -181,6 +183,14 @@ export const useRestApi = (options: UseRestApiOptions = {}) => {
     ajouterVendeur: useCallback(async (vendeur: string) => {
     return postRequest('/api/ajouter-vendeur', { vendeur });
   }, [postRequest]),
+
+    pauserVendeur: useCallback(async (vendeur: string) => {
+      return postRequest('/api/pauser-vendeur', { vendeur });
+    }, [postRequest]),
+
+    reprendreVendeur: useCallback(async (vendeur: string) => {
+      return postRequest('/api/reprendre-vendeur', { vendeur });
+    }, [postRequest]),
   };
 
   // Fonction pour obtenir les stats

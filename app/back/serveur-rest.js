@@ -8,6 +8,7 @@ const { verifierToken } = require('./middleware/auth');
 const creerRoutesAuth = require('./routes/auth');
 const creerRoutesUtilisateurs = require('./routes/utilisateurs');
 const creerRoutesPlanning = require('./routes/planning');
+const creerRoutesArchives = require('./routes/archives');
 
 const app = express();
 app.use(cors());
@@ -37,9 +38,24 @@ function initDatabase() {
         abandons INTEGER DEFAULT 0,
         client_id TEXT,
         client_heure_debut TEXT,
-        client_date_debut TEXT
+        client_date_debut TEXT,
+        en_pause INTEGER DEFAULT 0,
+        heure_pause TEXT
       )
     `);
+
+    // Migration : ajouter les colonnes pause si elles n'existent pas
+    db.all("PRAGMA table_info(vendeurs)", [], (err, columns) => {
+      if (!err && columns) {
+        const colNames = columns.map(c => c.name);
+        if (!colNames.includes('en_pause')) {
+          db.run('ALTER TABLE vendeurs ADD COLUMN en_pause INTEGER DEFAULT 0');
+        }
+        if (!colNames.includes('heure_pause')) {
+          db.run('ALTER TABLE vendeurs ADD COLUMN heure_pause TEXT');
+        }
+      }
+    });
 
     db.run(`
       CREATE TABLE IF NOT EXISTS config (
@@ -126,6 +142,19 @@ function initDatabase() {
         UNIQUE(journee_id, utilisateur_id)
       )
     `);
+
+    // Archives des journées clôturées (Phase 3)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS journee_archives (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date_journee TEXT NOT NULL UNIQUE,
+        total_vendeurs INTEGER NOT NULL,
+        total_ventes INTEGER NOT NULL,
+        moyenne_ventes REAL NOT NULL,
+        donnees TEXT NOT NULL,
+        cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
   });
 }
 
@@ -173,9 +202,9 @@ function genererIdClient() {
 
 // Fonction pour calculer le prochain vendeur disponible
 function calculerProchainVendeur(vendeurs) {
-  const disponibles = vendeurs.filter(v => !v.clientEnCours);
+  const disponibles = vendeurs.filter(v => !v.clientEnCours && !v.en_pause);
   if (disponibles.length === 0) return null;
-  
+
   // Tri par : 1) ventes croissantes, 2) abandons croissants, 3) ordre initial (index)
   disponibles.sort((a, b) => {
     // 1. Priorité aux moins de ventes
@@ -204,6 +233,9 @@ app.use(creerRoutesUtilisateurs(db));
 // Routes admin (planning)
 app.use(creerRoutesPlanning(db));
 
+// Routes admin (archives)
+app.use(creerRoutesArchives(db));
+
 // Middleware auth conditionnel sur les routes métier existantes
 const authActif = process.env.AUTH_ACTIF !== 'false';
 if (authActif) {
@@ -216,6 +248,8 @@ if (authActif) {
   app.use('/api/enregistrer-vente-directe', verifierToken);
   app.use('/api/terminer-journee', verifierToken);
   app.use('/api/ajouter-vendeur', verifierToken);
+  app.use('/api/pauser-vendeur', verifierToken);
+  app.use('/api/reprendre-vendeur', verifierToken);
   app.use('/api/planning-du-jour', verifierToken);
 }
 
@@ -244,7 +278,9 @@ app.get('/api/state', (req, res) => {
             id: v.client_id,
             heureDebut: v.client_heure_debut,
             dateDebut: v.client_date_debut
-          } : null
+          } : null,
+          en_pause: !!v.en_pause,
+          heure_pause: v.heure_pause || null
         }));
 
         const prochainVendeur = calculerProchainVendeur(vendeursData);
@@ -362,6 +398,10 @@ app.post('/api/prendre-client', (req, res) => {
 
       if (vendeurData.client_id) {
         return res.status(400).json({ error: 'Le vendeur a déjà un client' });
+      }
+
+      if (vendeurData.en_pause) {
+        return res.status(400).json({ error: 'Ce vendeur est en pause' });
       }
 
       const clientId = genererIdClient();
@@ -609,32 +649,43 @@ app.post('/api/terminer-journee', (req, res) => {
           }))
         };
 
-        // ✅ SUPPRIMER les vendeurs
-        db.run(`DELETE FROM vendeurs`, (err) => {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
+        // Archiver la journée en base AVANT suppression
+        const dateJournee = getAdjustedDate().toISOString().split('T')[0];
+        db.run(
+          `INSERT OR REPLACE INTO journee_archives
+           (date_journee, total_vendeurs, total_ventes, moyenne_ventes, donnees) VALUES (?, ?, ?, ?, ?)`,
+          [dateJournee, exportData.statistiques.totalVendeurs, exportData.statistiques.totalVentes,
+           parseFloat(exportData.statistiques.moyenneVentes) || 0, JSON.stringify(exportData)],
+          (err) => {
+            if (err) console.error('Erreur archivage:', err);
 
-          // ✅ SUPPRIMER l'historique
-          db.run(`DELETE FROM historique`, (err) => {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
+            // ✅ SUPPRIMER les vendeurs
+            db.run(`DELETE FROM vendeurs`, (err) => {
+              if (err) {
+                return res.status(500).json({ error: err.message });
+              }
 
-            // Mettre à jour le statut de la journée planifiée si elle existe
-            const aujourdhui = getAdjustedDate().toISOString().split('T')[0];
-            db.run(
-              "UPDATE planning_journees SET statut = 'termine' WHERE date_journee = ? AND statut IN ('planifie', 'en_cours')",
-              [aujourdhui]
-            );
+              // ✅ SUPPRIMER l'historique
+              db.run(`DELETE FROM historique`, (err) => {
+                if (err) {
+                  return res.status(500).json({ error: err.message });
+                }
 
-            res.json({
-              success: true, 
-              message: 'Journée clôturée avec succès',
-              exportData: exportData
+                // Mettre à jour le statut de la journée planifiée si elle existe
+                db.run(
+                  "UPDATE planning_journees SET statut = 'termine' WHERE date_journee = ? AND statut IN ('planifie', 'en_cours')",
+                  [dateJournee]
+                );
+
+                res.json({
+                  success: true,
+                  message: 'Journée clôturée avec succès',
+                  exportData: exportData
+                });
+              });
             });
-          });
-        });
+          }
+        );
       });
     });
   });
@@ -655,6 +706,7 @@ app.post('/api/reinitialiser', async (req, res) => {
     await runDelete('DELETE FROM planning_template_vendeurs');
     await runDelete('DELETE FROM planning_journees');
     await runDelete('DELETE FROM planning_templates');
+    await runDelete('DELETE FROM journee_archives');
     if (process.env.NODE_ENV === 'test') {
       await runDelete('DELETE FROM utilisateurs');
     }
@@ -728,6 +780,117 @@ app.post('/api/ajouter-vendeur', (req, res) => {
       });
     }
   );
+});
+
+// POST /api/pauser-vendeur - Mettre un vendeur en pause
+app.post('/api/pauser-vendeur', (req, res) => {
+  const { vendeur } = req.body;
+
+  if (!vendeur) {
+    return res.status(400).json({ error: 'Vendeur non spécifié' });
+  }
+
+  db.get('SELECT COUNT(*) as count FROM vendeurs', [], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (row.count === 0) {
+      return res.status(400).json({ error: 'Aucune journée active' });
+    }
+
+    db.get('SELECT * FROM vendeurs WHERE nom = ?', [vendeur], (err, vendeurRow) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!vendeurRow) return res.status(404).json({ error: 'Vendeur non trouvé' });
+
+      if (vendeurRow.client_id) {
+        return res.status(400).json({ error: 'Impossible de mettre en pause un vendeur avec un client en cours' });
+      }
+
+      if (vendeurRow.en_pause) {
+        return res.status(400).json({ error: 'Ce vendeur est déjà en pause' });
+      }
+
+      const maintenant = getAdjustedDate();
+
+      db.serialize(() => {
+        db.run(
+          'UPDATE vendeurs SET en_pause = 1, heure_pause = ? WHERE nom = ?',
+          [maintenant.toLocaleTimeString('fr-FR'), vendeur]
+        );
+
+        db.run(
+          'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+          [
+            maintenant.toLocaleDateString('fr-FR'),
+            maintenant.toLocaleTimeString('fr-FR'),
+            `Vendeur en pause`,
+            vendeur
+          ]
+        );
+
+        res.json({ success: true, message: `${vendeur} est en pause` });
+      });
+    });
+  });
+});
+
+// POST /api/reprendre-vendeur - Reprendre un vendeur en pause
+app.post('/api/reprendre-vendeur', (req, res) => {
+  const { vendeur } = req.body;
+
+  if (!vendeur) {
+    return res.status(400).json({ error: 'Vendeur non spécifié' });
+  }
+
+  db.get('SELECT COUNT(*) as count FROM vendeurs', [], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (row.count === 0) {
+      return res.status(400).json({ error: 'Aucune journée active' });
+    }
+
+    db.get('SELECT * FROM vendeurs WHERE nom = ?', [vendeur], (err, vendeurRow) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!vendeurRow) return res.status(404).json({ error: 'Vendeur non trouvé' });
+
+      if (!vendeurRow.en_pause) {
+        return res.status(400).json({ error: "Ce vendeur n'est pas en pause" });
+      }
+
+      const maintenant = getAdjustedDate();
+
+      // Calculer la durée de pause
+      let dureePause = '';
+      if (vendeurRow.heure_pause) {
+        try {
+          const [h, m, s] = vendeurRow.heure_pause.split(':').map(Number);
+          const debut = new Date(maintenant);
+          debut.setHours(h, m, s || 0, 0);
+          const diffMs = maintenant.getTime() - debut.getTime();
+          const minutes = Math.max(0, Math.floor(diffMs / (1000 * 60)));
+          dureePause = `${minutes}min`;
+        } catch {
+          dureePause = '?min';
+        }
+      }
+
+      db.serialize(() => {
+        db.run(
+          'UPDATE vendeurs SET en_pause = 0, heure_pause = NULL WHERE nom = ?',
+          [vendeur]
+        );
+
+        db.run(
+          'INSERT INTO historique (date, heure, action, vendeur) VALUES (?, ?, ?, ?)',
+          [
+            maintenant.toLocaleDateString('fr-FR'),
+            maintenant.toLocaleTimeString('fr-FR'),
+            `Vendeur reprend (pause: ${dureePause})`,
+            vendeur
+          ]
+        );
+
+        res.json({ success: true, message: `${vendeur} reprend (pause: ${dureePause})` });
+      });
+    });
+  });
 });
 
 // GET /api/planning-du-jour - Planning du jour (accessible par tous les utilisateurs authentifiés)

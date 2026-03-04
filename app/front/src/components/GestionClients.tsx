@@ -8,6 +8,8 @@ interface GestionClientsProps {
   prochainVendeur: string | null;
   onPrendreClient: (vendeur: string) => void;
   onAbandonnerClient: (vendeur: string) => void;
+  onPauserVendeur: (vendeur: string) => void;
+  onReprendreVendeur: (vendeur: string) => void;
 }
 
 const GestionClients: React.FC<GestionClientsProps> = ({
@@ -15,20 +17,25 @@ const GestionClients: React.FC<GestionClientsProps> = ({
   vendeursData,
   prochainVendeur,
   onPrendreClient,
-  onAbandonnerClient
+  onAbandonnerClient,
+  onPauserVendeur,
+  onReprendreVendeur
 }) => {
   // ========== CALCULS LOCAUX ==========
-  
-  // Vendeurs disponibles (sans client)
-  const vendeursDisponibles = ordre.filter(nom => !vendeursData[nom]?.clientEnCours);
-  
+
+  // Vendeurs disponibles (sans client, pas en pause)
+  const vendeursDisponibles = ordre.filter(nom => !vendeursData[nom]?.clientEnCours && !vendeursData[nom]?.en_pause);
+
   // Vendeurs occupés (avec client)
   const vendeursOccupes = ordre.filter(nom => vendeursData[nom]?.clientEnCours);
-  
+
+  // Vendeurs en pause
+  const vendeursEnPause = ordre.filter(nom => vendeursData[nom]?.en_pause);
+
   // Minimum de ventes parmi les disponibles
   const disponiblesData = vendeursDisponibles.map(nom => vendeursData[nom]).filter(Boolean);
-  const minVentes = disponiblesData.length > 0 
-    ? Math.min(...disponiblesData.map(v => v.compteurVentes)) 
+  const minVentes = disponiblesData.length > 0
+    ? Math.min(...disponiblesData.map(v => v.compteurVentes))
     : 0;
 
   return (
@@ -40,12 +47,20 @@ const GestionClients: React.FC<GestionClientsProps> = ({
         <div className="mb-6 p-4 bg-white rounded border text-center">
           <h3 className="font-bold text-blue-600">Prochain vendeur disponible</h3>
           <div className="text-2xl font-bold text-blue-700 mt-2">{prochainVendeur}</div>
-          <button 
-            onClick={() => onPrendreClient(prochainVendeur)}
-            className="mt-3 bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 font-semibold"
-          >
-            Prendre un client
-          </button>
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <button
+              onClick={() => onPrendreClient(prochainVendeur)}
+              className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 font-semibold"
+            >
+              Prendre un client
+            </button>
+            <button
+              onClick={() => onPauserVendeur(prochainVendeur)}
+              className="bg-gray-200 text-gray-600 px-4 py-2 rounded hover:bg-gray-300 text-sm"
+            >
+              Pause
+            </button>
+          </div>
         </div>
       )}
 
@@ -95,6 +110,39 @@ const GestionClients: React.FC<GestionClientsProps> = ({
         </div>
       )}
 
+      {/* Section: Vendeurs en pause */}
+      {vendeursEnPause.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-semibold mb-3 text-purple-700">Vendeurs en pause</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {vendeursEnPause.map((vendeur: string) => {
+              const vendeurData = vendeursData[vendeur];
+              const nbVentes = vendeurData?.compteurVentes || 0;
+
+              return (
+                <div key={vendeur} className="p-3 bg-purple-50 rounded border border-purple-200 flex justify-between items-center">
+                  <div>
+                    <strong>{vendeur}</strong>
+                    <span className="ml-2 text-sm text-gray-600">
+                      ({nbVentes} vente{nbVentes !== 1 ? 's' : ''})
+                    </span>
+                    <div className="text-xs text-purple-600 mt-1">
+                      ⏸ En pause {vendeurData?.heure_pause ? `depuis ${vendeurData.heure_pause}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onReprendreVendeur(vendeur)}
+                    className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
+                  >
+                    Reprendre
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Section: Vendeurs disponibles en attente */}
       {vendeursDisponibles.length > 1 && (
         <div>
@@ -103,18 +151,26 @@ const GestionClients: React.FC<GestionClientsProps> = ({
             {vendeursDisponibles.slice(1).map((vendeur: string, index: number) => {
               const nbVentes = vendeursData[vendeur]?.compteurVentes || 0;
               const estMinimum = nbVentes === minVentes;
-              
+
               return (
-                <div 
+                <div
                   key={vendeur}
-                  className={`p-2 rounded border text-sm ${
+                  className={`p-2 rounded border text-sm flex items-center gap-2 ${
                     estMinimum ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50'
                   }`}
                 >
-                  {index + 2}. {vendeur} ({nbVentes})
-                  {estMinimum && 
-                    <span className="ml-1 text-xs text-yellow-700">(min)</span>
-                  }
+                  <span>
+                    {index + 2}. {vendeur} ({nbVentes})
+                    {estMinimum &&
+                      <span className="ml-1 text-xs text-yellow-700">(min)</span>
+                    }
+                  </span>
+                  <button
+                    onClick={() => onPauserVendeur(vendeur)}
+                    className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
+                  >
+                    Pause
+                  </button>
                 </div>
               );
             })}
@@ -122,7 +178,7 @@ const GestionClients: React.FC<GestionClientsProps> = ({
         </div>
       )}
 
-      {vendeursDisponibles.length === 0 && (
+      {vendeursDisponibles.length === 0 && vendeursEnPause.length === 0 && (
         <div className="text-center p-4 bg-yellow-50 rounded border border-yellow-200">
           <p className="text-yellow-800 font-medium">
             🚫 Tous les vendeurs sont occupés avec des clients

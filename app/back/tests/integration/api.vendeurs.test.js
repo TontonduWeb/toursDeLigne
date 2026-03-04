@@ -94,6 +94,129 @@ describe('API - Gestion Vendeurs', () => {
     });
   });
 
+  describe('Gestion des pauses', () => {
+    it('devrait mettre un vendeur en pause', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      const res = await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+
+      const state = await request(app).get('/api/state');
+      const alice = state.body.vendeurs.find(v => v.nom === 'Alice');
+      expect(alice.en_pause).toBe(true);
+      expect(alice.heure_pause).toBeTruthy();
+    });
+
+    it('devrait reprendre un vendeur en pause', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const res = await request(app)
+        .post('/api/reprendre-vendeur')
+        .send({ vendeur: 'Alice' })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+
+      const state = await request(app).get('/api/state');
+      const alice = state.body.vendeurs.find(v => v.nom === 'Alice');
+      expect(alice.en_pause).toBe(false);
+      expect(alice.heure_pause).toBeNull();
+    });
+
+    it('devrait exclure le vendeur en pause du prochain vendeur', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob', 'Charlie'] });
+
+      await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const state = await request(app).get('/api/state');
+      expect(state.body.ordreActuel.prochainVendeur).toBe('Bob');
+    });
+
+    it('devrait rejeter la pause si le vendeur a un client en cours', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      await request(app)
+        .post('/api/prendre-client')
+        .send({ vendeur: 'Alice' });
+
+      const res = await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' })
+        .expect(400);
+
+      expect(res.body.error).toContain('client en cours');
+    });
+
+    it('devrait rejeter la pause si le vendeur est déjà en pause', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' });
+
+      const res = await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' })
+        .expect(400);
+
+      expect(res.body.error).toContain('déjà en pause');
+    });
+
+    it('devrait rejeter la reprise si le vendeur n\'est pas en pause', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      const res = await request(app)
+        .post('/api/reprendre-vendeur')
+        .send({ vendeur: 'Alice' })
+        .expect(400);
+
+      expect(res.body.error).toContain("pas en pause");
+    });
+
+    it('POST /api/prendre-client devrait rejeter si le vendeur est en pause', async () => {
+      await request(app)
+        .post('/api/demarrer-journee')
+        .send({ vendeurs: ['Alice', 'Bob'] });
+
+      await request(app)
+        .post('/api/pauser-vendeur')
+        .send({ vendeur: 'Alice' });
+
+      const res = await request(app)
+        .post('/api/prendre-client')
+        .send({ vendeur: 'Alice' })
+        .expect(400);
+
+      expect(res.body.error).toContain('en pause');
+    });
+  });
+
   describe('Ordre vendeurs', () => {
     it('vendeur min ventes est premier', async () => {
       await request(app)

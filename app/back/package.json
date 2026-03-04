@@ -10,6 +10,7 @@
     "test:integration": "cross-env NODE_ENV=test AUTH_ACTIF=false jest tests/integration",
     "test:auth": "cross-env NODE_ENV=test AUTH_ACTIF=true jest tests/integration/api.auth.test.js tests/integration/api.utilisateurs.test.js",
     "test:auth:journees": "cross-env NODE_ENV=test AUTH_ACTIF=true jest tests/integration/api.journees.test.js",
+    "test:auth:archives": "cross-env NODE_ENV=test AUTH_ACTIF=true jest tests/integration/api.archives.test.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",

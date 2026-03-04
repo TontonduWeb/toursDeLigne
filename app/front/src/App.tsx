@@ -8,6 +8,7 @@ import AdminLayout from './components/AdminLayout';
 import GestionUtilisateurs from './components/GestionUtilisateurs';
 import GestionPlanning from './components/GestionPlanning';
 import GestionJournees from './components/GestionJournees';
+import GestionStatistiques from './components/GestionStatistiques';
 
 const App: React.FC = () => {
   return (
@@ -35,6 +36,7 @@ const App: React.FC = () => {
             <Route path="utilisateurs" element={<GestionUtilisateurs />} />
             <Route path="planning" element={<GestionPlanning />} />
             <Route path="journees" element={<GestionJournees />} />
+            <Route path="statistiques" element={<GestionStatistiques />} />
           </Route>
         </Routes>
       </BrowserRouter>

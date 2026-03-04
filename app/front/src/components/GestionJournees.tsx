@@ -16,6 +16,52 @@ interface FormJournee {
   vendeurs: number[];
 }
 
+// ==================== Helpers semaine ====================
+
+function getLundi(d: Date): Date {
+  const copie = new Date(d);
+  const jour = copie.getDay();
+  copie.setDate(copie.getDate() - (jour === 0 ? 6 : jour - 1));
+  copie.setHours(0, 0, 0, 0);
+  return copie;
+}
+
+function getJoursSemaine(lundi: Date): string[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lundi);
+    d.setDate(lundi.getDate() + i);
+    return d.toISOString().split('T')[0];
+  });
+}
+
+function getDimanche(lundi: Date): Date {
+  const d = new Date(lundi);
+  d.setDate(lundi.getDate() + 6);
+  return d;
+}
+
+const JOURS_SEMAINE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+function formatDateAvecJour(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  const d = new Date(dateStr + 'T00:00:00');
+  const jourIndex = d.getDay();
+  const jourNom = JOURS_SEMAINE[jourIndex === 0 ? 6 : jourIndex - 1];
+  return `${jourNom} ${day}/${month}/${year}`;
+}
+
+function formatDateCourte(d: Date): string {
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}`;
+}
+
+function getAujourdhuiStr(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+// ==================== Composant ====================
+
 const GestionJournees: React.FC = () => {
   const { getAuthHeaders } = useAuthContext();
   const [journees, setJournees] = useState<PlanningJournee[]>([]);
@@ -32,9 +78,21 @@ const GestionJournees: React.FC = () => {
     vendeurs: [],
   });
 
+  // Vue semaine
+  const [semaineCourante, setSemaineCourante] = useState<Date>(() => getLundi(new Date()));
+
+  // Duplication
+  const [duplicateSource, setDuplicateSource] = useState<PlanningJournee | null>(null);
+  const [duplicateDate, setDuplicateDate] = useState<string>('');
+
+  const aujourdhui = getAujourdhuiStr();
+  const joursSemaine = getJoursSemaine(semaineCourante);
+
   const chargerJournees = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/planning/journees`, {
+      const lundi = semaineCourante.toISOString().split('T')[0];
+      const dimanche = getDimanche(semaineCourante).toISOString().split('T')[0];
+      const res = await fetch(`${API_URL}/api/planning/journees?du=${lundi}&au=${dimanche}`, {
         headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error('Erreur chargement journées');
@@ -43,7 +101,7 @@ const GestionJournees: React.FC = () => {
     } catch {
       setErreur('Impossible de charger les journées');
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, semaineCourante]);
 
   const chargerTemplates = useCallback(async () => {
     try {
@@ -73,9 +131,36 @@ const GestionJournees: React.FC = () => {
 
   useEffect(() => {
     chargerJournees();
+  }, [chargerJournees]);
+
+  useEffect(() => {
     chargerTemplates();
     chargerVendeursActifs();
-  }, [chargerJournees, chargerTemplates, chargerVendeursActifs]);
+  }, [chargerTemplates, chargerVendeursActifs]);
+
+  // ==================== Navigation semaine ====================
+
+  const semainePrecedente = () => {
+    setSemaineCourante(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
+  };
+
+  const semaineSuivante = () => {
+    setSemaineCourante(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
+  };
+
+  const allerAujourdhui = () => {
+    setSemaineCourante(getLundi(new Date()));
+  };
+
+  // ==================== Handlers ====================
 
   const toggleVendeur = (id: number, list: number[], setList: (v: number[]) => void) => {
     const index = list.indexOf(id);
@@ -86,15 +171,16 @@ const GestionJournees: React.FC = () => {
     }
   };
 
-  const handleCreer = async () => {
+  const handleCreer = async (dateOverride?: string) => {
     setErreur(null);
+    const dateJournee = dateOverride || form.date_journee;
 
-    if (!form.date_journee) {
+    if (!dateJournee) {
       setErreur('La date est requise');
       return;
     }
 
-    const body: any = { date_journee: form.date_journee };
+    const body: any = { date_journee: dateJournee };
 
     if (form.mode === 'template') {
       if (!form.template_id) {
@@ -166,7 +252,7 @@ const GestionJournees: React.FC = () => {
   };
 
   const handleSupprimer = async (id: number, date: string) => {
-    if (!window.confirm(`Supprimer la journée du ${formatDate(date)} ?`)) return;
+    if (!window.confirm(`Supprimer la journée du ${formatDateAvecJour(date)} ?`)) return;
 
     setErreur(null);
     try {
@@ -209,25 +295,94 @@ const GestionJournees: React.FC = () => {
     }
   };
 
+  const handlePresenceMasse = async (journeeId: number, present: boolean) => {
+    setErreur(null);
+    try {
+      const res = await fetch(`${API_URL}/api/planning/journees/${journeeId}/presence-masse`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ present }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erreur présence en masse');
+      }
+
+      chargerJournees();
+    } catch (err) {
+      setErreur(err instanceof Error ? err.message : 'Erreur');
+    }
+  };
+
+  const handleDupliquer = async () => {
+    if (!duplicateSource || !duplicateDate) return;
+    setErreur(null);
+
+    try {
+      const res = await fetch(`${API_URL}/api/planning/journees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          date_journee: duplicateDate,
+          vendeurs: duplicateSource.vendeurs.map((v, i) => ({
+            utilisateur_id: v.utilisateur_id,
+            ordre: v.ordre,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erreur duplication');
+      }
+
+      setDuplicateSource(null);
+      setDuplicateDate('');
+      chargerJournees();
+    } catch (err) {
+      setErreur(err instanceof Error ? err.message : 'Erreur');
+    }
+  };
+
   const ouvrirEdition = (j: PlanningJournee) => {
     setEditId(j.id);
     setEditVendeurs(j.vendeurs.map(v => v.utilisateur_id));
     setErreur(null);
   };
 
-  const formatDate = (dateStr: string): string => {
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}/${year}`;
+  const ouvrirCreationRapide = (date: string) => {
+    setForm({ ...form, date_journee: date });
+    setShowAjout(true);
+    setErreur(null);
   };
+
+  // ==================== Badges de statut ====================
 
   const getStatutBadge = (statut: string) => {
     switch (statut) {
       case 'planifie':
-        return <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">Planifié</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+            <span>📅</span> Planifié
+          </span>
+        );
       case 'en_cours':
-        return <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">En cours</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            En cours
+          </span>
+        );
       case 'termine':
-        return <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">Terminé</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-medium">
+            <span>✓</span> Terminé
+          </span>
+        );
       default:
         return null;
     }
@@ -236,6 +391,8 @@ const GestionJournees: React.FC = () => {
   const getNomVendeur = (id: number): string => {
     return vendeursActifs.find(v => v.id === id)?.nom || `#${id}`;
   };
+
+  // ==================== Rendu vendeur checkboxes ====================
 
   const renderVendeurCheckboxes = (selectedVendeurs: number[], setSelected: (v: number[]) => void) => (
     <div>
@@ -272,6 +429,167 @@ const GestionJournees: React.FC = () => {
     </div>
   );
 
+  // ==================== Rendu ligne journée / jour vide ====================
+
+  const renderJourneeLigne = (j: PlanningJournee) => (
+    <tr key={j.id} className={j.date_journee === aujourdhui ? 'bg-yellow-50' : ''}>
+      <td className="px-4 py-3 font-medium whitespace-nowrap">
+        <div className="flex items-center gap-2">
+          {formatDateAvecJour(j.date_journee)}
+          {j.date_journee === aujourdhui && (
+            <span className="px-1.5 py-0.5 rounded bg-yellow-200 text-yellow-800 text-[10px] font-bold uppercase">
+              Aujourd'hui
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3">{getStatutBadge(j.statut)}</td>
+      <td className="px-4 py-3">
+        {editId === j.id ? (
+          renderVendeurCheckboxes(editVendeurs, setEditVendeurs)
+        ) : (
+          <div>
+            {j.statut === 'planifie' && (
+              <div className="flex gap-1 mb-1">
+                <button
+                  onClick={() => handlePresenceMasse(j.id, true)}
+                  className="px-1.5 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded text-[10px] hover:bg-green-100"
+                  title="Tous présents"
+                >
+                  ✓ Tous
+                </button>
+                <button
+                  onClick={() => handlePresenceMasse(j.id, false)}
+                  className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-200 rounded text-[10px] hover:bg-red-100"
+                  title="Tous absents"
+                >
+                  ✗ Aucun
+                </button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1">
+              {j.vendeurs.map((v) => (
+                <button
+                  key={v.utilisateur_id}
+                  onClick={() => j.statut === 'planifie' ? handleTogglePresence(j.id, v.utilisateur_id, v.present) : undefined}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                    v.present
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-red-100 text-red-500 line-through'
+                  } ${j.statut === 'planifie' ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                  title={j.statut === 'planifie' ? `Cliquez pour ${v.present ? 'marquer absent' : 'marquer présent'}` : ''}
+                >
+                  <span className="font-medium">{v.ordre}.</span> {v.nom}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex gap-1 justify-end flex-wrap">
+          {j.statut === 'planifie' && editId === j.id && (
+            <>
+              <button
+                onClick={() => handleModifier(j.id)}
+                className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+              >
+                OK
+              </button>
+              <button
+                onClick={() => setEditId(null)}
+                className="px-2 py-1 bg-gray-200 rounded text-xs hover:bg-gray-300"
+              >
+                Annuler
+              </button>
+            </>
+          )}
+          {j.statut === 'planifie' && editId !== j.id && (
+            <>
+              <button
+                onClick={() => ouvrirEdition(j)}
+                className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200"
+              >
+                Modifier
+              </button>
+              <button
+                onClick={() => handleSupprimer(j.id, j.date_journee)}
+                className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs hover:bg-red-200"
+              >
+                Supprimer
+              </button>
+            </>
+          )}
+          {/* Dupliquer : disponible pour tous les statuts */}
+          {duplicateSource?.id === j.id ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={duplicateDate}
+                onChange={e => setDuplicateDate(e.target.value)}
+                className="px-1.5 py-0.5 border rounded text-xs w-32"
+              />
+              <button
+                onClick={handleDupliquer}
+                disabled={!duplicateDate}
+                className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
+              >
+                OK
+              </button>
+              <button
+                onClick={() => { setDuplicateSource(null); setDuplicateDate(''); }}
+                className="px-2 py-1 bg-gray-200 rounded text-xs hover:bg-gray-300"
+              >
+                ✗
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setDuplicateSource(j); setDuplicateDate(''); }}
+              className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs hover:bg-purple-200"
+            >
+              Dupliquer
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderJourVide = (dateStr: string) => (
+    <tr key={`vide-${dateStr}`} className={`${dateStr === aujourdhui ? 'bg-yellow-50' : 'bg-gray-50/50'}`}>
+      <td className="px-4 py-3 font-medium text-gray-400 whitespace-nowrap">
+        <div className="flex items-center gap-2">
+          {formatDateAvecJour(dateStr)}
+          {dateStr === aujourdhui && (
+            <span className="px-1.5 py-0.5 rounded bg-yellow-200 text-yellow-800 text-[10px] font-bold uppercase">
+              Aujourd'hui
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-gray-300 text-xs">—</td>
+      <td className="px-4 py-3 text-gray-300 text-xs italic">Aucune journée planifiée</td>
+      <td className="px-4 py-3 text-right">
+        <button
+          onClick={() => ouvrirCreationRapide(dateStr)}
+          className="px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded text-xs hover:bg-blue-100"
+        >
+          + Créer
+        </button>
+      </td>
+    </tr>
+  );
+
+  // ==================== Rendu principal ====================
+
+  const lundiStr = formatDateCourte(semaineCourante);
+  const dimancheStr = formatDateCourte(getDimanche(semaineCourante));
+
+  // Map journées par date pour la grille semaine
+  const journeesParDate = new Map<string, PlanningJournee>();
+  journees.forEach(j => journeesParDate.set(j.date_journee, j));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -281,6 +599,33 @@ const GestionJournees: React.FC = () => {
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
         >
           + Nouvelle journée
+        </button>
+      </div>
+
+      {/* Navigation semaine */}
+      <div className="flex items-center justify-between mb-4 bg-white rounded-lg border px-4 py-2">
+        <button
+          onClick={semainePrecedente}
+          className="px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
+        >
+          ← Précédente
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-sm">
+            Sem. du {lundiStr} au {dimancheStr}
+          </span>
+          <button
+            onClick={allerAujourdhui}
+            className="px-2.5 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium hover:bg-yellow-200"
+          >
+            Aujourd'hui
+          </button>
+        </div>
+        <button
+          onClick={semaineSuivante}
+          className="px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
+        >
+          Suivante →
         </button>
       </div>
 
@@ -362,7 +707,7 @@ const GestionJournees: React.FC = () => {
 
             <div className="flex gap-2">
               <button
-                onClick={handleCreer}
+                onClick={() => handleCreer()}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
               >
                 Créer
@@ -381,7 +726,7 @@ const GestionJournees: React.FC = () => {
         </div>
       )}
 
-      {/* Table des journées */}
+      {/* Grille semaine */}
       <div className="bg-white rounded-lg border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
@@ -393,75 +738,12 @@ const GestionJournees: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {journees.map(j => (
-              <tr key={j.id}>
-                <td className="px-4 py-3 font-medium">{formatDate(j.date_journee)}</td>
-                <td className="px-4 py-3">{getStatutBadge(j.statut)}</td>
-                <td className="px-4 py-3">
-                  {editId === j.id ? (
-                    renderVendeurCheckboxes(editVendeurs, setEditVendeurs)
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {j.vendeurs.map((v) => (
-                        <button
-                          key={v.utilisateur_id}
-                          onClick={() => j.statut === 'planifie' ? handleTogglePresence(j.id, v.utilisateur_id, v.present) : undefined}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-                            v.present
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-500 line-through'
-                          } ${j.statut === 'planifie' ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-                          title={j.statut === 'planifie' ? `Cliquez pour ${v.present ? 'marquer absent' : 'marquer présent'}` : ''}
-                        >
-                          <span className="font-medium">{v.ordre}.</span> {v.nom}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {j.statut === 'planifie' && (
-                    editId === j.id ? (
-                      <div className="flex gap-1 justify-end">
-                        <button
-                          onClick={() => handleModifier(j.id)}
-                          className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                        >
-                          OK
-                        </button>
-                        <button
-                          onClick={() => setEditId(null)}
-                          className="px-2 py-1 bg-gray-200 rounded text-xs hover:bg-gray-300"
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-1 justify-end">
-                        <button
-                          onClick={() => ouvrirEdition(j)}
-                          className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200"
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          onClick={() => handleSupprimer(j.id, j.date_journee)}
-                          className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs hover:bg-red-200"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                    )
-                  )}
-                </td>
-              </tr>
-            ))}
+            {joursSemaine.map(dateStr => {
+              const journee = journeesParDate.get(dateStr);
+              return journee ? renderJourneeLigne(journee) : renderJourVide(dateStr);
+            })}
           </tbody>
         </table>
-
-        {journees.length === 0 && (
-          <p className="text-center text-gray-400 py-8">Aucune journée planifiée</p>
-        )}
       </div>
     </div>
   );
