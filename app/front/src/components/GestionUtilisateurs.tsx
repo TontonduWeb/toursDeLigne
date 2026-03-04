@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { Utilisateur } from '../types';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082';
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 interface FormUtilisateur {
   nom: string;

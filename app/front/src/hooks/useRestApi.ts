@@ -57,7 +57,7 @@ interface UseRestApiOptions {
 
 export const useRestApi = (options: UseRestApiOptions = {}) => {
   const {
-    baseUrl = 'http://192.168.1.27:8082',
+    baseUrl = '',
     pollingInterval = 3000,
     token = null,
     onTokenExpire,

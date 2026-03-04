@@ -35,14 +35,14 @@ const TourDeLigneApp: React.FC = () => {
 
   // ========== HOOK REST API (source unique de vérité) ==========
   const { state, isLoading, error, isOnline, actions, refresh } = useRestApi({
-    baseUrl: process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082',
+    baseUrl: process.env.REACT_APP_API_URL || '',
     pollingInterval: 3000,
     token,
     onTokenExpire: handleTokenExpire,
   });
 
   // ========== PLANNING DU JOUR ==========
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.1.27:8082';
+  const apiUrl = process.env.REACT_APP_API_URL || '';
   const journeeActive = (state?.vendeurs?.length ?? 0) > 0;
 
   useEffect(() => {
