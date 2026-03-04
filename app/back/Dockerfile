@@ -18,6 +18,8 @@ RUN npm install --only=production
 # Copier le code source
 COPY serveur-rest.js ./
 COPY utils/ ./utils/
+COPY middleware/ ./middleware/
+COPY routes/ ./routes/
 
 # Créer le dossier data avec les bonnes permissions
 RUN mkdir -p /app/data && \
