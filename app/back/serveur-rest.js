@@ -22,13 +22,14 @@ const db = new sqlite3.Database(dbPath, (err) => {
   } else {
     db.run('PRAGMA journal_mode=WAL');
     db.run('PRAGMA foreign_keys = ON');
-    initDatabase();
-    seedAdmin();
+    initDatabase(() => {
+      seedAdmin();
+    });
   }
 });
 
 // Créer les tables si elles n'existent pas
-function initDatabase() {
+function initDatabase(callback) {
   db.serialize(() => {
     // Table des vendeurs
     db.run(`
@@ -154,7 +155,9 @@ function initDatabase() {
         donnees TEXT NOT NULL,
         cree_le TEXT NOT NULL DEFAULT (datetime('now'))
       )
-    `);
+    `, () => {
+      if (callback) callback();
+    });
   });
 }
 
